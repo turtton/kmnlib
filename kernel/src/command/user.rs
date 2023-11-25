@@ -1,8 +1,11 @@
 use crate::entity::{UserId, UserName};
 use crate::KernelError;
 use error_stack::Report;
+use serde::{Deserialize, Serialize};
+use strum::Display;
 use uuid::Uuid;
 
+#[derive(Debug, Clone, Serialize, Deserialize, Display)]
 pub enum UserCommand {
     CreateUser { name: UserName },
     UpdateUserName { id: UserId, name: UserName },

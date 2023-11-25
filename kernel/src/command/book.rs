@@ -27,3 +27,8 @@ pub enum BookCommand {
 pub trait BookCommandHandler {
     async fn handle(&self, command: BookCommand) -> Result<Uuid, Report<KernelError>>;
 }
+
+pub trait DependOnBookCommandHandler {
+    type BookCommandHandler: BookCommandHandler;
+    fn book_command_handler(&self) -> &Self::BookCommandHandler;
+}

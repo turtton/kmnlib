@@ -16,3 +16,8 @@ pub enum UserCommand {
 pub trait UserCommandHandler: Sync + Send + 'static {
     async fn handle(&self, command: UserCommand) -> Result<Uuid, Report<KernelError>>;
 }
+
+pub trait DependOnUserCommandHandler: Sync + Send + 'static {
+    type UserCommandHandler: UserCommandHandler;
+    fn user_command_handler(&self) -> &Self::UserCommandHandler;
+}

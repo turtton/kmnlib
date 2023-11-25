@@ -2,7 +2,7 @@ mod id;
 mod title;
 
 pub use self::{id::*, title::*};
-use crate::entity::common::EventNumber;
+use crate::entity::common::EventVersion;
 use destructure::Destructure;
 use serde::{Deserialize, Serialize};
 use vodca::References;
@@ -11,15 +11,11 @@ use vodca::References;
 pub struct Book {
     id: BookId,
     title: BookTitle,
-    prev_number: EventNumber<Book>,
+    version: EventVersion<Book>,
 }
 
 impl Book {
-    pub fn new(id: BookId, title: BookTitle, prev_number: EventNumber<Book>) -> Self {
-        Self {
-            id,
-            title,
-            prev_number,
-        }
+    pub fn new(id: BookId, title: BookTitle, version: EventVersion<Book>) -> Self {
+        Self { id, title, version }
     }
 }

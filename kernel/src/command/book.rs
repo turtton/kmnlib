@@ -1,4 +1,4 @@
-use crate::entity::{Book, BookId, BookTitle, EventNumber};
+use crate::entity::{Book, BookId, BookTitle, EventVersion};
 use crate::KernelError;
 use error_stack::Report;
 use serde::{Deserialize, Serialize};
@@ -10,9 +10,13 @@ pub enum BookCommand {
     CreateBook {
         title: BookTitle,
     },
-    UpdateBook {
+    RentBook {
         id: BookId,
-        title: BookTitle,
+        rev_version: EventVersion<Book>,
+    },
+    ReturnBook {
+        id: BookId,
+        rev_version: EventVersion<Book>,
     },
     DeleteBook {
         id: BookId,

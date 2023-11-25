@@ -2,7 +2,7 @@ mod id;
 mod name;
 
 pub use self::{id::*, name::*};
-use crate::entity::common::EventNumber;
+use crate::entity::common::EventVersion;
 use destructure::Destructure;
 use serde::{Deserialize, Serialize};
 use vodca::References;
@@ -11,15 +11,11 @@ use vodca::References;
 pub struct User {
     id: UserId,
     name: UserName,
-    prev_number: EventNumber<User>,
+    version: EventVersion<User>,
 }
 
 impl User {
-    pub fn new(id: UserId, name: UserName, prev_number: EventNumber<User>) -> Self {
-        Self {
-            id,
-            name,
-            prev_number,
-        }
+    pub fn new(id: UserId, name: UserName, version: EventVersion<User>) -> Self {
+        Self { id, name, version }
     }
 }

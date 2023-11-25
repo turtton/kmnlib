@@ -11,6 +11,7 @@ uuid = { version = "1.4", features = ["serde", "v4"] }
 destructure = "0.3.0"
 vodca = { git = "https://github.com/turtton/vodca.git", rev = "73bc4cf4ef6730e68ca948603a5358dd0d425a88" }
 serde = { version = "1.0.193", features = ["derive"] }
+strum = { version = "0.25", features = ["derive"] }
 
 async-trait = "0.1.74"
 error-stack = { workspace = true }

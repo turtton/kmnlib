@@ -13,7 +13,6 @@ pub enum BookCommand {
     UpdateBook {
         id: BookId,
         title: BookTitle,
-        prev_number: EventNumber<Book>,
     },
     DeleteBook {
         id: BookId,

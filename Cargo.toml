@@ -13,3 +13,4 @@ authors = ["turtton"]
 
 [workspace.dependencies]
 error-stack = "0.4.1"
+async-trait = "0.1.74"

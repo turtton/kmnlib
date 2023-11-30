@@ -1,9 +1,7 @@
 mod command;
+mod database;
 mod entity;
-mod error;
 mod query;
-
-pub use self::error::*;
 
 #[cfg(feature = "prelude")]
 pub mod prelude {
@@ -14,6 +12,9 @@ pub mod prelude {
 
 #[cfg(feature = "interface")]
 pub mod interface {
+    pub mod database {
+        pub use crate::database::*;
+    }
     pub mod command {
         pub use crate::command::*;
     }

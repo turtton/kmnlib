@@ -1,6 +1,5 @@
 use crate::entity::{UserId, UserName};
-use crate::KernelError;
-use error_stack::Report;
+use error_stack::{Context, Report};
 use serde::{Deserialize, Serialize};
 use strum::Display;
 use uuid::Uuid;
@@ -14,7 +13,8 @@ pub enum UserCommand {
 
 #[async_trait::async_trait]
 pub trait UserCommandHandler: Sync + Send + 'static {
-    async fn handle(&self, command: UserCommand) -> Result<Uuid, Report<KernelError>>;
+    type Error: Context;
+    async fn handle(&self, command: UserCommand) -> Result<Uuid, Report<Self::Error>>;
 }
 
 pub trait DependOnUserCommandHandler: Sync + Send + 'static {

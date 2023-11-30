@@ -1,6 +1,5 @@
 use crate::entity::{Book, BookId, BookTitle, EventVersion};
-use crate::KernelError;
-use error_stack::Report;
+use error_stack::{Context, Report};
 use serde::{Deserialize, Serialize};
 use strum::Display;
 use uuid::Uuid;
@@ -25,7 +24,8 @@ pub enum BookCommand {
 
 #[async_trait::async_trait]
 pub trait BookCommandHandler {
-    async fn handle(&self, command: BookCommand) -> Result<Uuid, Report<KernelError>>;
+    type Error: Context;
+    async fn handle(&self, command: BookCommand) -> Result<Uuid, Report<Self::Error>>;
 }
 
 pub trait DependOnBookCommandHandler {

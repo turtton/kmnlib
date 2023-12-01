@@ -7,10 +7,18 @@ authors.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+uuid = { version = "1.6.1", features = ["v4"] }
 sqlx = { version = "0.7.3", features = ["uuid", "postgres", "runtime-tokio-native-tls"] }
+eventstore = "2.3.0"
 serde_json = "1.0.108"
+dotenvy = "0.15.7"
+serde = { version = "1.0.193", features = ["derive"] }
 
 error-stack = { workspace = true }
 async-trait = { workspace = true }
 
 kernel = { path = "../kernel" }
+
+[dev-dependencies]
+tokio = { version = "1.19.2", features = ["macros"] }
+test-with = { version = "*", default-features = false, features = []}

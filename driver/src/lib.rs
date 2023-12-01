@@ -1,14 +1,11 @@
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+use crate::error::DriverError;
+use error_stack::{Report, ResultExt};
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod database;
+pub mod error;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+pub(crate) fn env(key: &str) -> Result<String, Report<DriverError>> {
+    dotenvy::var(key)
+        .change_context_lazy(|| DriverError::Env)
+        .attach_printable_lazy(|| format!("Env {} not specified", key))
 }

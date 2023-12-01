@@ -1,23 +1,24 @@
 use crate::entity::{Book, BookId, BookTitle, EventVersion};
 use error_stack::{Context, Report};
 use serde::{Deserialize, Serialize};
-use strum::Display;
-use uuid::Uuid;
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Display)]
+pub static BOOK_STREAM_NAME: &str = "book-stream";
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum BookCommand {
-    CreateBook {
+    Create {
+        id: BookId,
         title: BookTitle,
     },
-    RentBook {
+    Rent {
         id: BookId,
         rev_version: EventVersion<Book>,
     },
-    ReturnBook {
+    Return {
         id: BookId,
         rev_version: EventVersion<Book>,
     },
-    DeleteBook {
+    Delete {
         id: BookId,
     },
 }
@@ -25,7 +26,8 @@ pub enum BookCommand {
 #[async_trait::async_trait]
 pub trait BookCommandHandler {
     type Error: Context;
-    async fn handle(&self, command: BookCommand) -> Result<Uuid, Report<Self::Error>>;
+    async fn handle(&self, command: BookCommand)
+        -> Result<EventVersion<Book>, Report<Self::Error>>;
 }
 
 pub trait DependOnBookCommandHandler {

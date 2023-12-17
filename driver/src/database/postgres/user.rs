@@ -7,10 +7,10 @@ use sqlx::pool::PoolConnection;
 use sqlx::types::Uuid;
 use sqlx::{PgConnection, Postgres};
 
-pub struct PostgresUserQuery;
+pub struct PostgresUserRepository;
 
 #[async_trait::async_trait]
-impl UserQuery<PoolConnection<Postgres>> for PostgresUserQuery {
+impl UserQuery<PoolConnection<Postgres>> for PostgresUserRepository {
     type Error = DriverError;
     async fn find_by_id(
         &self,
@@ -22,7 +22,7 @@ impl UserQuery<PoolConnection<Postgres>> for PostgresUserQuery {
 }
 
 #[async_trait::async_trait]
-impl UserModifier<PoolConnection<Postgres>> for PostgresUserQuery {
+impl UserModifier<PoolConnection<Postgres>> for PostgresUserRepository {
     type Error = DriverError;
 
     async fn create(
@@ -143,7 +143,7 @@ impl PgUserInternal {
 
 #[cfg(test)]
 mod test {
-    use crate::database::postgres::user::PostgresUserQuery;
+    use crate::database::postgres::user::PostgresUserRepository;
     use crate::database::postgres::PostgresDatabase;
     use crate::error::DriverError;
     use error_stack::Report;
@@ -165,25 +165,31 @@ mod test {
             EventVersion::new(0),
         );
 
-        PostgresUserQuery
+        PostgresUserRepository
             .create(&mut connection, user.clone())
             .await?;
 
-        let found = PostgresUserQuery.find_by_id(&mut connection, &id).await?;
+        let found = PostgresUserRepository
+            .find_by_id(&mut connection, &id)
+            .await?;
         assert_eq!(found, Some(user.clone()));
 
         let user = user.reconstruct(|u| u.name = UserName::new("test2".to_string()));
-        PostgresUserQuery
+        PostgresUserRepository
             .update(&mut connection, user.clone())
             .await?;
 
-        let found = PostgresUserQuery.find_by_id(&mut connection, &id).await?;
+        let found = PostgresUserRepository
+            .find_by_id(&mut connection, &id)
+            .await?;
         assert_eq!(found, Some(user));
 
-        PostgresUserQuery
+        PostgresUserRepository
             .delete(&mut connection, id.clone())
             .await?;
-        let found = PostgresUserQuery.find_by_id(&mut connection, &id).await?;
+        let found = PostgresUserRepository
+            .find_by_id(&mut connection, &id)
+            .await?;
         assert!(found.is_none());
 
         Ok(())

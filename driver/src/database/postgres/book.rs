@@ -7,10 +7,10 @@ use sqlx::pool::PoolConnection;
 use sqlx::{PgConnection, Postgres};
 use uuid::Uuid;
 
-pub struct PostgresBookQuery;
+pub struct PostgresBookRepository;
 
 #[async_trait::async_trait]
-impl BookQuery<PoolConnection<Postgres>> for PostgresBookQuery {
+impl BookQuery<PoolConnection<Postgres>> for PostgresBookRepository {
     type Error = DriverError;
     async fn find_by_id(
         &self,
@@ -22,7 +22,7 @@ impl BookQuery<PoolConnection<Postgres>> for PostgresBookQuery {
 }
 
 #[async_trait::async_trait]
-impl BookModifier<PoolConnection<Postgres>> for PostgresBookQuery {
+impl BookModifier<PoolConnection<Postgres>> for PostgresBookRepository {
     type Error = DriverError;
 
     async fn create(
@@ -143,7 +143,7 @@ impl PgBookInternal {
 
 #[cfg(test)]
 mod test {
-    use crate::database::postgres::book::PostgresBookQuery;
+    use crate::database::postgres::book::PostgresBookRepository;
     use crate::database::postgres::PostgresDatabase;
     use crate::error::DriverError;
     use error_stack::Report;
@@ -164,19 +164,23 @@ mod test {
             BookTitle::new("test".to_string()),
             EventVersion::new(0),
         );
-        PostgresBookQuery.create(&mut con, book.clone()).await?;
+        PostgresBookRepository
+            .create(&mut con, book.clone())
+            .await?;
 
-        let found = PostgresBookQuery.find_by_id(&mut con, &id).await?;
+        let found = PostgresBookRepository.find_by_id(&mut con, &id).await?;
         assert_eq!(found, Some(book.clone()));
 
         let book = book.reconstruct(|b| b.title = BookTitle::new("test2".to_string()));
-        PostgresBookQuery.update(&mut con, book.clone()).await?;
+        PostgresBookRepository
+            .update(&mut con, book.clone())
+            .await?;
 
-        let found = PostgresBookQuery.find_by_id(&mut con, &id).await?;
+        let found = PostgresBookRepository.find_by_id(&mut con, &id).await?;
         assert_eq!(found, Some(book));
 
-        PostgresBookQuery.delete(&mut con, id.clone()).await?;
-        let found = PostgresBookQuery.find_by_id(&mut con, &id).await?;
+        PostgresBookRepository.delete(&mut con, id.clone()).await?;
+        let found = PostgresBookRepository.find_by_id(&mut con, &id).await?;
         assert!(found.is_none());
 
         Ok(())

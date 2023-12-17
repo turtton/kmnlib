@@ -10,13 +10,9 @@ pub enum BookCommand {
         id: BookId,
         title: BookTitle,
     },
-    Rent {
+    Update {
         id: BookId,
-        rev_version: EventVersion<Book>,
-    },
-    Return {
-        id: BookId,
-        rev_version: EventVersion<Book>,
+        title: Option<BookTitle>,
     },
     Delete {
         id: BookId,

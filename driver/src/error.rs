@@ -7,6 +7,7 @@ pub enum DriverError {
     EventStore,
     Env,
     Conversion,
+    Serde,
 }
 
 impl Display for DriverError {

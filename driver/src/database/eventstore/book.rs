@@ -1,56 +1,26 @@
-use crate::database::eventstore::append_event;
-use crate::error::DriverError;
-use error_stack::Report;
+use error_stack::{Report, ResultExt};
 use eventstore::Client;
-use kernel::interface::command::{BookCommand, BookCommandHandler, USER_STREAM_NAME};
+
+use kernel::interface::command::{BookCommand, BookCommandHandler, BOOK_STREAM_NAME};
+use kernel::interface::event::BookEvent;
+use kernel::interface::query::BookEventQuery;
 use kernel::prelude::entity::{Book, BookId, EventVersion};
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
-enum BookEvent {
-    Created { title: String },
-    Rented,
-    Returned,
-    Deleted,
-}
+use crate::database::eventstore::{append_event, read_stream};
+use crate::error::DriverError;
 
-impl BookEvent {
-    fn convert(command: BookCommand) -> (String, BookId, Option<EventVersion<Book>>, Self) {
-        match command {
-            BookCommand::Create { id, title } => {
-                let event = Self::Created {
-                    title: title.as_ref().clone(),
-                };
-                ("created-book".to_string(), id, None, event)
-            }
-            BookCommand::Rent { id, rev_version } => {
-                let event = Self::Rented;
-                ("rented-book".to_string(), id, Some(rev_version), event)
-            }
-            BookCommand::Return { id, rev_version } => {
-                let event = Self::Returned;
-                ("returned-book".to_string(), id, Some(rev_version), event)
-            }
-            BookCommand::Delete { id } => {
-                let event = Self::Deleted;
-                ("deleted-book".to_string(), id, None, event)
-            }
-        }
-    }
-}
-
-pub struct EventStoreBookCommandHandler {
+pub struct EventStoreBookHandler {
     client: Client,
 }
 
-impl EventStoreBookCommandHandler {
+impl EventStoreBookHandler {
     pub fn new(client: Client) -> Self {
         Self { client }
     }
 }
 
 #[async_trait::async_trait]
-impl BookCommandHandler for EventStoreBookCommandHandler {
+impl BookCommandHandler for EventStoreBookHandler {
     type Error = DriverError;
     async fn handle(
         &self,
@@ -59,9 +29,9 @@ impl BookCommandHandler for EventStoreBookCommandHandler {
         let (event_type, id, rev_version, event) = BookEvent::convert(command);
         append_event(
             &self.client,
-            USER_STREAM_NAME,
+            BOOK_STREAM_NAME,
             event_type,
-            id,
+            Some(id),
             rev_version,
             event,
         )
@@ -69,38 +39,66 @@ impl BookCommandHandler for EventStoreBookCommandHandler {
     }
 }
 
+#[async_trait::async_trait]
+impl BookEventQuery for EventStoreBookHandler {
+    type Error = DriverError;
+    async fn get_events(
+        &self,
+        id: &BookId,
+        since: Option<EventVersion<Book>>,
+    ) -> Result<Vec<BookEvent>, Report<Self::Error>> {
+        read_stream(&self.client, BOOK_STREAM_NAME, Some(id), since)
+            .await?
+            .iter()
+            .map(|event| event.as_json::<BookEvent>())
+            .collect::<serde_json::Result<Vec<BookEvent>>>()
+            .change_context_lazy(|| DriverError::Serde)
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use crate::database::eventstore::{create_event_store_client, EventStoreBookCommandHandler};
-    use crate::error::DriverError;
     use error_stack::Report;
-    use kernel::interface::command::{BookCommand, BookCommandHandler};
-    use kernel::prelude::entity::{BookId, BookTitle};
     use uuid::Uuid;
 
-    #[test_with::env(EVENTSTORE)]
+    use kernel::interface::command::{BookCommand, BookCommandHandler};
+    use kernel::interface::event::BookEvent;
+    use kernel::interface::query::BookEventQuery;
+    use kernel::prelude::entity::{BookId, BookTitle};
+
+    use crate::database::eventstore::{create_event_store_client, EventStoreBookHandler};
+    use crate::error::DriverError;
+
+    #[test_with::env(EVENTSTORE_TEST)]
     #[tokio::test]
-    async fn handle() -> Result<(), Report<DriverError>> {
+    async fn test() -> Result<(), Report<DriverError>> {
         let client = create_event_store_client()?;
-        let handler = EventStoreBookCommandHandler::new(client);
+        let handler = EventStoreBookHandler::new(client);
         let id = BookId::new(Uuid::new_v4());
+
         let create_book = BookCommand::Create {
             id: id.clone(),
             title: BookTitle::new("test".to_string()),
         };
-        let created_next = handler.handle(create_book).await?;
-        let rent_book = BookCommand::Rent {
+        let _ = handler.handle(create_book.clone()).await?;
+
+        let mut expected = vec![BookEvent::convert(create_book).3];
+        assert_eq!(handler.get_events(&id, None).await?, expected);
+
+        let update_book = BookCommand::Update {
             id: id.clone(),
-            rev_version: created_next,
+            title: Some(BookTitle::new("test2".to_string())),
         };
-        let rented_next = handler.handle(rent_book).await?;
-        let return_book = BookCommand::Return {
-            id: id.clone(),
-            rev_version: rented_next,
-        };
-        let _ = handler.handle(return_book).await?;
+        let _ = handler.handle(update_book.clone()).await?;
+
+        expected.push(BookEvent::convert(update_book).3);
+        assert_eq!(handler.get_events(&id, None).await?, expected);
+
         let delete_book = BookCommand::Delete { id: id.clone() };
-        handler.handle(delete_book).await?;
+        let _ = handler.handle(delete_book.clone()).await?;
+
+        expected.push(BookEvent::convert(delete_book).3);
+        assert_eq!(handler.get_events(&id, None).await?, expected);
         Ok(())
     }
 }

@@ -1,6 +1,8 @@
 mod command;
 mod database;
 mod entity;
+mod event;
+mod modify;
 mod query;
 
 #[cfg(feature = "prelude")]
@@ -18,7 +20,13 @@ pub mod interface {
     pub mod command {
         pub use crate::command::*;
     }
+    pub mod event {
+        pub use crate::event::*;
+    }
     pub mod query {
         pub use crate::query::*;
+    }
+    pub mod update {
+        pub use crate::modify::*;
     }
 }

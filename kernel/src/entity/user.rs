@@ -7,7 +7,7 @@ use destructure::Destructure;
 use serde::{Deserialize, Serialize};
 use vodca::References;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Destructure, References)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Destructure, References)]
 pub struct User {
     id: UserId,
     name: UserName,

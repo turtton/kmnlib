@@ -23,11 +23,11 @@ erDiagram
 
 ### Event
 
-| name            | data                      | description          |
-|-----------------|---------------------------|----------------------|
-| UserCreated     | `{name: String}`          | User is created      |
-| UserNameChanged | `{id: i64, name: String}` | User name is changed |
-| UserDeleted     | `{id: i64}`               | User is deleted      |
+| name        | data                              |
+|-------------|-----------------------------------|
+| UserCreated | `{name: String}`                  |
+| UserUpdated | `{id: i64, name: Option<String>}` |
+| UserDeleted | `{id: i64}`                       |
 
 ## Book
 
@@ -43,18 +43,18 @@ erDiagram
     book_rents {
         bigint user_id "PK,FK"
         bigint book_id "PK,FK"
+        timestamp returned
     }
-    books ||--o| bookrents: "exists if rented"
+    books ||--o| book_rents: "exists if rented"
 ```
 
 ### Event
 
-| name         | data                                             | description      |
-|--------------|--------------------------------------------------|------------------|
-| BookCreated  | `{title: String}`                                | Book is created  |
-| BookRented   | `{book_id: i64, user_id: i64, rev_version: i64}` | Book is rented   |
-| BookReturned | `{book_id: i64, user_id: i64, rev_version: i64}` | Book is returned |
-| BookDeleted  | `{book_id: i64}`                                 | Book is deleted  |
+| name        | data                                    |
+|-------------|-----------------------------------------|
+| BookCreated | `{title: String}`                       |
+| BookUpdated | `{book_id: i64, title: Option<String>}` |
+| BookDeleted | `{book_id: i64}`                        |
 
 # DB
 
@@ -65,6 +65,7 @@ PostgreSQL
 ```shell
 podman run --rm --name kmnlib-postgres -v ./migrations/20231125184100_init.sql:/docker-entrypoint-initdb.d/postgre.sql -e POSTGRES_PASSWORD=develop -p 5432:5432 docker.io/postgres
 ```
+
 ## Event
 
 EventStoreDB

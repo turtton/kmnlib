@@ -7,7 +7,7 @@ pub static USER_STREAM_NAME: &str = "user-stream";
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UserCommand {
     Create { id: UserId, name: UserName },
-    UpdateName { id: UserId, name: UserName },
+    Update { id: UserId, name: Option<UserName> },
     Delete { id: UserId },
 }
 

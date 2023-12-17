@@ -8,7 +8,8 @@ authors.workspace = true
 
 [dependencies]
 uuid = { version = "1.6.1", features = ["v4"] }
-sqlx = { version = "0.7.3", features = ["uuid", "postgres", "runtime-tokio-native-tls"] }
+time = { version = "0.3.30", features = ["serde"] }
+sqlx = { version = "0.7.3", features = ["uuid", "time", "postgres", "runtime-tokio-native-tls"] }
 eventstore = "2.3.0"
 serde_json = "1.0.108"
 dotenvy = "0.15.7"

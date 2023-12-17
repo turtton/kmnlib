@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS book_rents
 (
     user_id UUID NOT NULL,
     book_id UUID NOT NULL,
-    returned_at TIMESTAMP,
+    returned_at TIMESTAMPTZ,
     PRIMARY KEY (user_id, book_id),
     FOREIGN KEY (user_id) REFERENCES users (id),
     FOREIGN KEY (book_id) REFERENCES books (id)

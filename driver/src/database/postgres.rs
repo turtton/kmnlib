@@ -1,7 +1,8 @@
 mod book;
+mod rent;
 mod user;
 
-pub use self::{book::*, user::*};
+pub use self::{book::*, rent::*, user::*};
 use crate::env;
 use crate::error::DriverError;
 use error_stack::{Report, ResultExt};

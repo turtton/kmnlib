@@ -29,6 +29,10 @@ erDiagram
 | UserUpdated | `{id: i64, name: Option<String>}` |
 | UserDeleted | `{id: i64}`                       |
 
+### EventStream
+
+- `User-{id}`
+
 ## Book
 
 ### Snapshot
@@ -55,6 +59,26 @@ erDiagram
 | BookCreated | `{title: String}`                       |
 | BookUpdated | `{book_id: i64, title: Option<String>}` |
 | BookDeleted | `{book_id: i64}`                        |
+
+| name         | data                                                  |
+|--------------|-------------------------------------------------------|
+| BookRented   | `{user_id: i64, book_id: i64, expected_version: i64}` |
+| BookReturned | `{user_id: i64, book_id: i64, expected_version: i64}` |
+
+### EventStream
+
+- `Book-{id}`
+- `BookRent`
+
+## StreamVersions
+
+```mermaid
+erDiagram
+    stream_versions {
+        text stream_name "PK"
+        bigint version
+    }
+```
 
 # DB
 

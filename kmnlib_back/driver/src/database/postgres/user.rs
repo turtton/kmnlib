@@ -2,7 +2,7 @@ use crate::error::DriverError;
 use error_stack::{Report, ResultExt};
 use kernel::interface::query::UserQuery;
 use kernel::interface::update::UserModifier;
-use kernel::prelude::entity::{EventVersion, User, UserId, UserName};
+use kernel::prelude::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
 use sqlx::pool::PoolConnection;
 use sqlx::types::Uuid;
 use sqlx::{PgConnection, Postgres};
@@ -54,6 +54,7 @@ impl UserModifier<PoolConnection<Postgres>> for PostgresUserRepository {
 struct UserRow {
     id: Uuid,
     name: String,
+    rent_limit: i32,
     version: i64,
 }
 
@@ -62,6 +63,7 @@ impl From<UserRow> for User {
         User::new(
             UserId::new(row.id),
             UserName::new(row.name),
+            UserRentLimit::new(row.rent_limit),
             EventVersion::new(row.version),
         )
     }
@@ -77,7 +79,7 @@ impl PgUserInternal {
         let row = sqlx::query_as::<_, UserRow>(
             // language=postgresql
             r#"
-            SELECT id, name, version
+            SELECT id, name, rent_limit, version
             FROM users
             WHERE id = $1
             "#,
@@ -94,12 +96,13 @@ impl PgUserInternal {
         sqlx::query(
             // language=postgresql
             r#"
-            INSERT INTO users (id, name, version)
-            VALUES ($1, $2, $3)
+            INSERT INTO users (id, name, rent_limit, version)
+            VALUES ($1, $2, $3, $4)
             "#,
         )
         .bind(user.id().as_ref())
         .bind(user.name().as_ref())
+        .bind(user.rent_limit().as_ref())
         .bind(user.version().as_ref())
         .execute(con)
         .await
@@ -150,7 +153,7 @@ mod test {
     use kernel::interface::database::QueryDatabaseConnection;
     use kernel::interface::query::UserQuery;
     use kernel::interface::update::UserModifier;
-    use kernel::prelude::entity::{EventVersion, User, UserId, UserName};
+    use kernel::prelude::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
     use uuid::Uuid;
 
     #[test_with::env(POSTGRES_TEST)]
@@ -162,6 +165,7 @@ mod test {
         let user = User::new(
             id.clone(),
             UserName::new("test".to_string()),
+            UserRentLimit::new(1),
             EventVersion::new(0),
         );
 

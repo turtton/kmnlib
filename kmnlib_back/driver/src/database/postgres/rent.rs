@@ -2,10 +2,9 @@ use crate::error::DriverError;
 use error_stack::{Report, ResultExt};
 use kernel::interface::query::RentQuery;
 use kernel::interface::update::RentModifier;
-use kernel::prelude::entity::{BookId, Rent, ReturnedAt, UserId};
+use kernel::prelude::entity::{BookId, Rent, UserId};
 use sqlx::pool::PoolConnection;
 use sqlx::{PgConnection, Postgres};
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 pub struct PostgresRentRepository;
@@ -51,14 +50,6 @@ impl RentModifier<PoolConnection<Postgres>> for PostgresRentRepository {
         PgRentInternal::create(con, rent).await
     }
 
-    async fn update(
-        &self,
-        con: &mut PoolConnection<Postgres>,
-        rent: &Rent,
-    ) -> Result<(), Report<Self::Error>> {
-        PgRentInternal::update(con, rent).await
-    }
-
     async fn delete(
         &self,
         con: &mut PoolConnection<Postgres>,
@@ -73,16 +64,11 @@ impl RentModifier<PoolConnection<Postgres>> for PostgresRentRepository {
 struct RentRow {
     book_id: Uuid,
     user_id: Uuid,
-    returned_at: Option<OffsetDateTime>,
 }
 
 impl From<RentRow> for Rent {
     fn from(value: RentRow) -> Self {
-        Rent::new(
-            BookId::new(value.book_id),
-            UserId::new(value.user_id),
-            value.returned_at.map(ReturnedAt::new),
-        )
+        Rent::new(BookId::new(value.book_id), UserId::new(value.user_id))
     }
 }
 
@@ -99,8 +85,7 @@ impl PgRentInternal {
             r#"
             SELECT
                 book_id,
-                user_id,
-                returned_at
+                user_id
             FROM
                 book_rents
             WHERE
@@ -124,8 +109,7 @@ impl PgRentInternal {
             r#"
             SELECT
                 book_id,
-                user_id,
-                returned_at
+                user_id
             FROM
                 book_rents
             WHERE
@@ -148,8 +132,7 @@ impl PgRentInternal {
             r#"
             SELECT
                 book_id,
-                user_id,
-                returned_at
+                user_id
             FROM
                 book_rents
             WHERE
@@ -167,31 +150,12 @@ impl PgRentInternal {
         sqlx::query(
             // language=postgresql
             r#"
-            INSERT INTO book_rents (book_id, user_id, returned_at)
-            VALUES ($1, $2, $3)
+            INSERT INTO book_rents (book_id, user_id)
+            VALUES ($1, $2)
             "#,
         )
         .bind(rent.book_id().as_ref())
         .bind(rent.user_id().as_ref())
-        .bind(rent.returned_at().map(|v| *v.as_ref()))
-        .execute(con)
-        .await
-        .change_context_lazy(|| DriverError::SqlX)?;
-        Ok(())
-    }
-
-    async fn update(con: &mut PgConnection, rent: &Rent) -> Result<(), Report<DriverError>> {
-        sqlx::query(
-            // language=postgresql
-            r#"
-            UPDATE book_rents
-            SET returned_at = $3
-            WHERE book_id = $1 AND user_id = $2
-            "#,
-        )
-        .bind(rent.book_id().as_ref())
-        .bind(rent.user_id().as_ref())
-        .bind(rent.returned_at().map(|v| *v.as_ref()))
         .execute(con)
         .await
         .change_context_lazy(|| DriverError::SqlX)?;
@@ -230,11 +194,11 @@ mod test {
     use kernel::interface::query::RentQuery;
     use kernel::interface::update::{BookModifier, RentModifier, UserModifier};
     use kernel::prelude::entity::{
-        Book, BookId, BookTitle, EventVersion, Rent, ReturnedAt, User, UserId, UserName,
+        Book, BookAmount, BookId, BookTitle, EventVersion, Rent, User, UserId, UserName,
+        UserRentLimit,
     };
-    use time::Duration;
 
-    // #[test_with::env(POSTGRES_TEST)]
+    #[test_with::env(POSTGRES_TEST)]
     #[tokio::test]
     async fn test() -> Result<(), Report<DriverError>> {
         let db = PostgresDatabase::new().await?;
@@ -243,6 +207,7 @@ mod test {
         let book = Book::new(
             book_id.clone(),
             BookTitle::new("title".to_string()),
+            BookAmount::new(1),
             EventVersion::new(0),
         );
         PostgresBookRepository.create(&mut con, book).await?;
@@ -251,34 +216,18 @@ mod test {
         let user = User::new(
             user_id.clone(),
             UserName::new("name".to_string()),
+            UserRentLimit::new(1),
             EventVersion::new(0),
         );
         PostgresUserRepository.create(&mut con, user).await?;
 
-        let rent = Rent::new(book_id.clone(), user_id.clone(), None);
+        let rent = Rent::new(book_id.clone(), user_id.clone());
         PostgresRentRepository.create(&mut con, &rent).await?;
 
         let find = PostgresRentRepository
             .find_by_id(&mut con, &book_id, &user_id)
             .await?;
         assert_eq!(find, Some(rent.clone()));
-
-        let rent = rent.reconstruct(|r| {
-            r.returned_at = Some(ReturnedAt::new(time::OffsetDateTime::now_utc()))
-        });
-        PostgresRentRepository.update(&mut con, &rent).await?;
-
-        let find = PostgresRentRepository
-            .find_by_id(&mut con, &book_id, &user_id)
-            .await?;
-        assert!(find.is_some());
-        match (find.unwrap().returned_at(), rent.returned_at()) {
-            (Some(a), Some(e)) => {
-                let diff = a.as_ref().clone() - e.as_ref().clone();
-                assert!(diff < Duration::seconds(1));
-            }
-            _ => panic!("find.unwrap().returned_at() is None"),
-        }
 
         PostgresRentRepository
             .delete(&mut con, &book_id, &user_id)

@@ -64,7 +64,7 @@ mod test {
     use kernel::interface::command::{BookCommand, BookCommandHandler};
     use kernel::interface::event::BookEvent;
     use kernel::interface::query::BookEventQuery;
-    use kernel::prelude::entity::{BookId, BookTitle};
+    use kernel::prelude::entity::{BookAmount, BookId, BookTitle};
 
     use crate::database::eventstore::{create_event_store_client, EventStoreBookHandler};
     use crate::error::DriverError;
@@ -79,6 +79,7 @@ mod test {
         let create_book = BookCommand::Create {
             id: id.clone(),
             title: BookTitle::new("test".to_string()),
+            amount: BookAmount::new(1),
         };
         let _ = handler.handle(create_book.clone()).await?;
 
@@ -88,6 +89,7 @@ mod test {
         let update_book = BookCommand::Update {
             id: id.clone(),
             title: Some(BookTitle::new("test2".to_string())),
+            amount: None,
         };
         let _ = handler.handle(update_book.clone()).await?;
 

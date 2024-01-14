@@ -5,7 +5,6 @@ use error_stack::{Context, Report};
 pub trait RentModifier<Connection>: 'static + Sync + Send {
     type Error: Context;
     async fn create(&self, con: &mut Connection, rent: &Rent) -> Result<(), Report<Self::Error>>;
-    async fn update(&self, con: &mut Connection, rent: &Rent) -> Result<(), Report<Self::Error>>;
     async fn delete(
         &self,
         con: &mut Connection,

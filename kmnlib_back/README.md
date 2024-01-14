@@ -17,17 +17,18 @@ erDiagram
     users {
         bigserial id "PK"
         text name
-        bigserial version
+        int rent_limit
+        bigint version
     }
 ```
 
 ### Event
 
-| name        | data                              |
-|-------------|-----------------------------------|
-| UserCreated | `{name: String}`                  |
-| UserUpdated | `{id: i64, name: Option<String>}` |
-| UserDeleted | `{id: i64}`                       |
+| name        | data                                                       |
+|-------------|------------------------------------------------------------|
+| UserCreated | `{name: String, rent_limit: i32}`                          |
+| UserUpdated | `{id: i64, name: Option<String>, rent_limit: Option<i32>}` |
+| UserDeleted | `{id: i64}`                                                |
 
 ### EventStream
 
@@ -42,23 +43,23 @@ erDiagram
     books {
         bigserial id "PK"
         text title
-        bigserial version
+        int amount
+        bigint version
     }
     book_rents {
         bigint user_id "PK,FK"
         bigint book_id "PK,FK"
-        timestamp returned
     }
     books ||--o| book_rents: "exists if rented"
 ```
 
 ### Event
 
-| name        | data                                    |
-|-------------|-----------------------------------------|
-| BookCreated | `{title: String}`                       |
-| BookUpdated | `{book_id: i64, title: Option<String>}` |
-| BookDeleted | `{book_id: i64}`                        |
+| name        | data                                                         |
+|-------------|--------------------------------------------------------------|
+| BookCreated | `{title: String, amount: i32}`                               |
+| BookUpdated | `{book_id: i64, title: Option<String>, amount: Option<i32>}` |
+| BookDeleted | `{book_id: i64}`                                             |
 
 | name         | data                                                  |
 |--------------|-------------------------------------------------------|

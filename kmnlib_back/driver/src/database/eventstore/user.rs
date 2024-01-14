@@ -62,7 +62,7 @@ mod test {
     use kernel::interface::command::{UserCommand, UserCommandHandler};
     use kernel::interface::event::UserEvent;
     use kernel::interface::query::UserEventQuery;
-    use kernel::prelude::entity::{UserId, UserName};
+    use kernel::prelude::entity::{UserId, UserName, UserRentLimit};
     use uuid::Uuid;
 
     #[test_with::env(EVENTSTORE_TEST)]
@@ -75,6 +75,7 @@ mod test {
         let create_user = UserCommand::Create {
             id: id.clone(),
             name: UserName::new("test".to_string()),
+            rent_limit: UserRentLimit::new(1),
         };
         handler.handle(create_user.clone()).await?;
 
@@ -84,6 +85,7 @@ mod test {
         let update_user = UserCommand::Update {
             id: id.clone(),
             name: Some(UserName::new("test2".to_string())),
+            rent_limit: None,
         };
         handler.handle(update_user.clone()).await?;
 

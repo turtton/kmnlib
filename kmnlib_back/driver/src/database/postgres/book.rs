@@ -2,7 +2,7 @@ use crate::error::DriverError;
 use error_stack::{Report, ResultExt};
 use kernel::interface::query::BookQuery;
 use kernel::interface::update::BookModifier;
-use kernel::prelude::entity::{Book, BookId, BookTitle, EventVersion};
+use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
 use sqlx::pool::PoolConnection;
 use sqlx::{PgConnection, Postgres};
 use uuid::Uuid;
@@ -54,6 +54,7 @@ impl BookModifier<PoolConnection<Postgres>> for PostgresBookRepository {
 struct BookRow {
     id: Uuid,
     title: String,
+    amount: i32,
     version: i64,
 }
 
@@ -62,6 +63,7 @@ impl From<BookRow> for Book {
         Book::new(
             BookId::new(value.id),
             BookTitle::new(value.title),
+            BookAmount::new(value.amount),
             EventVersion::new(value.version),
         )
     }
@@ -77,7 +79,7 @@ impl PgBookInternal {
         let row = sqlx::query_as::<_, BookRow>(
             // language=postgresql
             r#"
-            SELECT id, title, version
+            SELECT id, title, amount, version
             FROM books
             WHERE id = $1
             "#,
@@ -94,12 +96,13 @@ impl PgBookInternal {
         // language=postgresql
         sqlx::query(
             r#"
-            INSERT INTO books (id, title, version)
-            VALUES ($1, $2, $3)
+            INSERT INTO books (id, title, amount, version)
+            VALUES ($1, $2, $3, $4)
             "#,
         )
         .bind(book.id().as_ref())
         .bind(book.title().as_ref())
+        .bind(book.amount().as_ref())
         .bind(book.version().as_ref())
         .execute(con)
         .await
@@ -150,7 +153,7 @@ mod test {
     use kernel::interface::database::QueryDatabaseConnection;
     use kernel::interface::query::BookQuery;
     use kernel::interface::update::BookModifier;
-    use kernel::prelude::entity::{Book, BookId, BookTitle, EventVersion};
+    use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
 
     #[test_with::env(POSTGRES_TEST)]
     #[tokio::test]
@@ -162,6 +165,7 @@ mod test {
         let book = Book::new(
             id.clone(),
             BookTitle::new("test".to_string()),
+            BookAmount::new(1),
             EventVersion::new(0),
         );
         PostgresBookRepository

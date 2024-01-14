@@ -1,4 +1,4 @@
-use crate::entity::{EventVersion, User, UserId, UserName};
+use crate::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
 use error_stack::{Context, Report};
 use serde::{Deserialize, Serialize};
 
@@ -6,9 +6,19 @@ pub static USER_STREAM_NAME: &str = "user-stream";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UserCommand {
-    Create { id: UserId, name: UserName },
-    Update { id: UserId, name: Option<UserName> },
-    Delete { id: UserId },
+    Create {
+        id: UserId,
+        name: UserName,
+        rent_limit: UserRentLimit,
+    },
+    Update {
+        id: UserId,
+        name: Option<UserName>,
+        rent_limit: Option<UserRentLimit>,
+    },
+    Delete {
+        id: UserId,
+    },
 }
 
 #[async_trait::async_trait]

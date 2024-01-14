@@ -1,15 +1,14 @@
 use crate::entity::{Book, BookId, EventVersion};
 use crate::event::BookEvent;
-use error_stack::{Context, Report};
 
 #[async_trait::async_trait]
 pub trait BookQuery<Connection>: Sync + Send + 'static {
-    type Error: Context;
+    type Error;
     async fn find_by_id(
         &self,
         con: &mut Connection,
         id: &BookId,
-    ) -> Result<Option<Book>, Report<Self::Error>>;
+    ) -> Result<Option<Book>, Self::Error>;
 }
 
 pub trait DependOnBookQuery<Connection>: Sync + Send + 'static {
@@ -19,12 +18,12 @@ pub trait DependOnBookQuery<Connection>: Sync + Send + 'static {
 
 #[async_trait::async_trait]
 pub trait BookEventQuery: Sync + Send + 'static {
-    type Error: Context;
+    type Error;
     async fn get_events(
         &self,
         id: &BookId,
         since: Option<EventVersion<Book>>,
-    ) -> Result<Vec<BookEvent>, Report<Self::Error>>;
+    ) -> Result<Vec<BookEvent>, Self::Error>;
 }
 
 pub trait DependOnBookEventQuery: Sync + Send + 'static {

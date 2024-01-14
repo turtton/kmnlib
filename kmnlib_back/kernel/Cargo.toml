@@ -14,7 +14,6 @@ vodca = { git = "https://github.com/turtton/vodca.git", rev = "73bc4cf4ef6730e68
 serde = { version = "1.0.193", features = ["derive"] }
 
 async-trait = { workspace = true }
-error-stack = { workspace = true }
 
 [features]
 interface = []

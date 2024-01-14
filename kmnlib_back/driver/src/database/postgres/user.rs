@@ -1,11 +1,12 @@
-use crate::error::DriverError;
-use error_stack::{Report, ResultExt};
-use kernel::interface::query::UserQuery;
-use kernel::interface::update::UserModifier;
-use kernel::prelude::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
 use sqlx::pool::PoolConnection;
 use sqlx::types::Uuid;
 use sqlx::{PgConnection, Postgres};
+
+use kernel::interface::query::UserQuery;
+use kernel::interface::update::UserModifier;
+use kernel::prelude::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
+
+use crate::error::DriverError;
 
 pub struct PostgresUserRepository;
 
@@ -16,7 +17,7 @@ impl UserQuery<PoolConnection<Postgres>> for PostgresUserRepository {
         &self,
         con: &mut PoolConnection<Postgres>,
         id: &UserId,
-    ) -> Result<Option<User>, Report<DriverError>> {
+    ) -> Result<Option<User>, DriverError> {
         PgUserInternal::find_by_id(con, id).await
     }
 }
@@ -29,7 +30,7 @@ impl UserModifier<PoolConnection<Postgres>> for PostgresUserRepository {
         &self,
         con: &mut PoolConnection<Postgres>,
         user: User,
-    ) -> Result<(), Report<DriverError>> {
+    ) -> Result<(), DriverError> {
         PgUserInternal::create(con, user).await
     }
 
@@ -37,7 +38,7 @@ impl UserModifier<PoolConnection<Postgres>> for PostgresUserRepository {
         &self,
         con: &mut PoolConnection<Postgres>,
         user: User,
-    ) -> Result<(), Report<DriverError>> {
+    ) -> Result<(), DriverError> {
         PgUserInternal::update(con, user).await
     }
 
@@ -45,7 +46,7 @@ impl UserModifier<PoolConnection<Postgres>> for PostgresUserRepository {
         &self,
         con: &mut PoolConnection<Postgres>,
         user_id: UserId,
-    ) -> Result<(), Report<DriverError>> {
+    ) -> Result<(), DriverError> {
         PgUserInternal::delete(con, user_id).await
     }
 }
@@ -72,10 +73,7 @@ impl From<UserRow> for User {
 pub(in crate::database) struct PgUserInternal;
 
 impl PgUserInternal {
-    async fn find_by_id(
-        con: &mut PgConnection,
-        id: &UserId,
-    ) -> Result<Option<User>, Report<DriverError>> {
+    async fn find_by_id(con: &mut PgConnection, id: &UserId) -> Result<Option<User>, DriverError> {
         let row = sqlx::query_as::<_, UserRow>(
             // language=postgresql
             r#"
@@ -86,13 +84,12 @@ impl PgUserInternal {
         )
         .bind(id.as_ref())
         .fetch_optional(con)
-        .await
-        .change_context_lazy(|| DriverError::SqlX)?;
+        .await?;
         let found = row.map(User::from);
         Ok(found)
     }
 
-    async fn create(con: &mut PgConnection, user: User) -> Result<(), Report<DriverError>> {
+    async fn create(con: &mut PgConnection, user: User) -> Result<(), DriverError> {
         sqlx::query(
             // language=postgresql
             r#"
@@ -105,12 +102,11 @@ impl PgUserInternal {
         .bind(user.rent_limit().as_ref())
         .bind(user.version().as_ref())
         .execute(con)
-        .await
-        .change_context_lazy(|| DriverError::SqlX)?;
+        .await?;
         Ok(())
     }
 
-    async fn update(con: &mut PgConnection, user: User) -> Result<(), Report<DriverError>> {
+    async fn update(con: &mut PgConnection, user: User) -> Result<(), DriverError> {
         // language=postgresql
         sqlx::query(
             r#"
@@ -123,12 +119,11 @@ impl PgUserInternal {
         .bind(user.name().as_ref())
         .bind(user.version().as_ref())
         .execute(con)
-        .await
-        .change_context_lazy(|| DriverError::SqlX)?;
+        .await?;
         Ok(())
     }
 
-    async fn delete(con: &mut PgConnection, user_id: UserId) -> Result<(), Report<DriverError>> {
+    async fn delete(con: &mut PgConnection, user_id: UserId) -> Result<(), DriverError> {
         // language=postgresql
         sqlx::query(
             r#"
@@ -138,27 +133,27 @@ impl PgUserInternal {
         )
         .bind(user_id.as_ref())
         .execute(con)
-        .await
-        .change_context_lazy(|| DriverError::SqlX)?;
+        .await?;
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::database::postgres::user::PostgresUserRepository;
-    use crate::database::postgres::PostgresDatabase;
-    use crate::error::DriverError;
-    use error_stack::Report;
+    use uuid::Uuid;
+
     use kernel::interface::database::QueryDatabaseConnection;
     use kernel::interface::query::UserQuery;
     use kernel::interface::update::UserModifier;
     use kernel::prelude::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
-    use uuid::Uuid;
+
+    use crate::database::postgres::user::PostgresUserRepository;
+    use crate::database::postgres::PostgresDatabase;
+    use crate::error::DriverError;
 
     #[test_with::env(POSTGRES_TEST)]
     #[tokio::test]
-    async fn find_by_id() -> Result<(), Report<DriverError>> {
+    async fn find_by_id() -> Result<(), DriverError> {
         let db = PostgresDatabase::new().await?;
         let mut connection = db.transact().await?;
         let id = UserId::new(Uuid::new_v4());

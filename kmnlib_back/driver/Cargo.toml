@@ -15,7 +15,8 @@ serde_json = "1.0.108"
 dotenvy = "0.15.7"
 serde = { version = "1.0.193", features = ["derive"] }
 
-error-stack = { workspace = true }
+thiserror = "1.0.56"
+anyhow = "1.0.79"
 async-trait = { workspace = true }
 
 kernel = { path = "../kernel" }

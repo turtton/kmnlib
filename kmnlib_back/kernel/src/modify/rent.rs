@@ -1,16 +1,15 @@
 use crate::entity::{BookId, Rent, UserId};
-use error_stack::{Context, Report};
 
 #[async_trait::async_trait]
 pub trait RentModifier<Connection>: 'static + Sync + Send {
-    type Error: Context;
-    async fn create(&self, con: &mut Connection, rent: &Rent) -> Result<(), Report<Self::Error>>;
+    type Error;
+    async fn create(&self, con: &mut Connection, rent: &Rent) -> Result<(), Self::Error>;
     async fn delete(
         &self,
         con: &mut Connection,
         book_id: &BookId,
         user_id: &UserId,
-    ) -> Result<(), Report<Self::Error>>;
+    ) -> Result<(), Self::Error>;
 }
 
 pub trait DependOnRentModifier<Connection>: 'static + Sync + Send {

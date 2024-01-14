@@ -1,9 +1,7 @@
-use error_stack::{Context, Report};
-
 #[async_trait::async_trait]
 pub trait QueryDatabaseConnection<Connection>: 'static + Sync + Send {
-    type Error: Context;
-    async fn transact(&self) -> Result<Connection, Report<Self::Error>>;
+    type Error;
+    async fn transact(&self) -> Result<Connection, Self::Error>;
 }
 
 pub trait DependOnDatabaseConnection<Connection>: 'static + Sync + Send {

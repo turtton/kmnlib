@@ -1,6 +1,6 @@
-use crate::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
-use error_stack::{Context, Report};
 use serde::{Deserialize, Serialize};
+
+use crate::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
 
 pub static BOOK_STREAM_NAME: &str = "book-stream";
 
@@ -23,9 +23,8 @@ pub enum BookCommand {
 
 #[async_trait::async_trait]
 pub trait BookCommandHandler {
-    type Error: Context;
-    async fn handle(&self, command: BookCommand)
-        -> Result<EventVersion<Book>, Report<Self::Error>>;
+    type Error;
+    async fn handle(&self, command: BookCommand) -> Result<EventVersion<Book>, Self::Error>;
 }
 
 pub trait DependOnBookCommandHandler {

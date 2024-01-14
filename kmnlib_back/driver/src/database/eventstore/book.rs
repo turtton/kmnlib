@@ -1,4 +1,3 @@
-use error_stack::{Report, ResultExt};
 use eventstore::Client;
 
 use kernel::interface::command::{BookCommand, BookCommandHandler, BOOK_STREAM_NAME};
@@ -22,10 +21,7 @@ impl EventStoreBookHandler {
 #[async_trait::async_trait]
 impl BookCommandHandler for EventStoreBookHandler {
     type Error = DriverError;
-    async fn handle(
-        &self,
-        command: BookCommand,
-    ) -> Result<EventVersion<Book>, Report<DriverError>> {
+    async fn handle(&self, command: BookCommand) -> Result<EventVersion<Book>, DriverError> {
         let (event_type, id, rev_version, event) = BookEvent::convert(command);
         append_event(
             &self.client,
@@ -46,19 +42,18 @@ impl BookEventQuery for EventStoreBookHandler {
         &self,
         id: &BookId,
         since: Option<EventVersion<Book>>,
-    ) -> Result<Vec<BookEvent>, Report<Self::Error>> {
+    ) -> Result<Vec<BookEvent>, Self::Error> {
         read_stream(&self.client, BOOK_STREAM_NAME, Some(id), since)
             .await?
             .iter()
             .map(|event| event.as_json::<BookEvent>())
             .collect::<serde_json::Result<Vec<BookEvent>>>()
-            .change_context_lazy(|| DriverError::Serde)
+            .map_err(DriverError::from)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use error_stack::Report;
     use uuid::Uuid;
 
     use kernel::interface::command::{BookCommand, BookCommandHandler};
@@ -71,7 +66,7 @@ mod test {
 
     #[test_with::env(EVENTSTORE_TEST)]
     #[tokio::test]
-    async fn test() -> Result<(), Report<DriverError>> {
+    async fn test() -> Result<(), DriverError> {
         let client = create_event_store_client()?;
         let handler = EventStoreBookHandler::new(client);
         let id = BookId::new(Uuid::new_v4());

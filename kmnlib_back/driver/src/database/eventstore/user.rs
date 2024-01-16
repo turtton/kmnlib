@@ -27,7 +27,7 @@ impl UserCommandHandler for EventStoreUserHandler {
             &self.client,
             USER_STREAM_NAME,
             event_type,
-            Some(id),
+            Some(&id.as_ref().to_string()),
             None,
             event,
         )
@@ -43,12 +43,17 @@ impl UserEventQuery for EventStoreUserHandler {
         id: &UserId,
         since: Option<EventVersion<User>>,
     ) -> Result<Vec<UserEvent>, Self::Error> {
-        read_stream(&self.client, USER_STREAM_NAME, Some(id), since)
-            .await?
-            .iter()
-            .map(|event| event.as_json::<UserEvent>())
-            .collect::<serde_json::Result<Vec<UserEvent>>>()
-            .map_err(DriverError::from)
+        read_stream(
+            &self.client,
+            USER_STREAM_NAME,
+            Some(&id.as_ref().to_string()),
+            since,
+        )
+        .await?
+        .iter()
+        .map(|event| event.as_json::<UserEvent>())
+        .collect::<serde_json::Result<Vec<UserEvent>>>()
+        .map_err(DriverError::from)
     }
 }
 

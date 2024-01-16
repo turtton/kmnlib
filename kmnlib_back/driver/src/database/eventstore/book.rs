@@ -27,7 +27,7 @@ impl BookCommandHandler for EventStoreBookHandler {
             &self.client,
             BOOK_STREAM_NAME,
             event_type,
-            Some(id),
+            Some(&id.as_ref().to_string()),
             rev_version,
             event,
         )
@@ -43,12 +43,17 @@ impl BookEventQuery for EventStoreBookHandler {
         id: &BookId,
         since: Option<EventVersion<Book>>,
     ) -> Result<Vec<BookEvent>, Self::Error> {
-        read_stream(&self.client, BOOK_STREAM_NAME, Some(id), since)
-            .await?
-            .iter()
-            .map(|event| event.as_json::<BookEvent>())
-            .collect::<serde_json::Result<Vec<BookEvent>>>()
-            .map_err(DriverError::from)
+        read_stream(
+            &self.client,
+            BOOK_STREAM_NAME,
+            Some(&id.as_ref().to_string()),
+            since,
+        )
+        .await?
+        .iter()
+        .map(|event| event.as_json::<BookEvent>())
+        .collect::<serde_json::Result<Vec<BookEvent>>>()
+        .map_err(DriverError::from)
     }
 }
 

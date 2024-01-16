@@ -2,16 +2,16 @@ use eventstore::{
     AppendToStreamOptions, Client, ClientSettings, EventData, ReadStreamOptions, RecordedEvent,
     ResolvedEvent, StreamPosition,
 };
-use uuid::Uuid;
 
 use kernel::prelude::entity::EventVersion;
 
 use crate::env;
 use crate::error::DriverError;
 
-pub use self::{book::*, user::*};
+pub use self::{book::*, rent::*, user::*};
 
 mod book;
+mod rent;
 mod user;
 
 static EVENTSTORE_URL: &str = "EVENTSTORE_URL";
@@ -25,25 +25,25 @@ pub async fn append_event<T>(
     client: &Client,
     stream_name: &str,
     event_type: String,
-    id: Option<impl AsRef<Uuid>>,
+    id_str: Option<&str>,
     rev_version: Option<EventVersion<T>>,
     event: impl serde::Serialize,
 ) -> Result<EventVersion<T>, DriverError> {
-    let expected_rev = rev_version.map_or(Ok(eventstore::ExpectedRevision::Any), |version| {
-        u64::try_from(*version.as_ref())
-            .map(eventstore::ExpectedRevision::Exact)
-            .map_err(DriverError::from)
-    })?;
+    let expected_rev =
+        rev_version.map_or(
+            Ok(eventstore::ExpectedRevision::Any),
+            |version| match version {
+                EventVersion::Nothing => Ok(eventstore::ExpectedRevision::NoStream),
+                EventVersion::Exact(version, _) => u64::try_from(version)
+                    .map(eventstore::ExpectedRevision::Exact)
+                    .map_err(DriverError::from),
+            },
+        )?;
     let option = AppendToStreamOptions::default().expected_revision(expected_rev);
     let event = EventData::json(&event_type, &event)?;
-    let string_id = id.map(|uuid| uuid.as_ref().to_string());
 
     let result = client
-        .append_to_stream(
-            create_stream_name(stream_name, string_id.as_deref()),
-            &option,
-            event,
-        )
+        .append_to_stream(create_stream_name(stream_name, id_str), &option, event)
         .await?;
 
     let raw_version = i64::try_from(result.next_expected_version)?;
@@ -54,17 +54,16 @@ pub async fn append_event<T>(
 pub async fn read_stream<T>(
     client: &Client,
     stream_name: &str,
-    id: Option<impl AsRef<Uuid>>,
+    id_str: Option<&str>,
     version: Option<EventVersion<T>>,
 ) -> Result<Vec<RecordedEvent>, DriverError> {
-    let string_id = id.map(|uuid| uuid.as_ref().to_string());
-    let stream_name = create_stream_name(stream_name, string_id.as_deref());
+    let stream_name = create_stream_name(stream_name, id_str);
     let option = ReadStreamOptions::default();
     let option = match version {
-        Some(version) => {
-            option.position(u64::try_from(*version.as_ref()).map(StreamPosition::Position)?)
+        Some(EventVersion::Exact(version, ..)) => {
+            option.position(u64::try_from(version).map(StreamPosition::Position)?)
         }
-        None => option,
+        _ => option,
     };
     let mut result = client.read_stream(stream_name, &option).await?;
     let mut events = Vec::new();

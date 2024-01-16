@@ -66,7 +66,7 @@ mod test {
 
     #[test_with::env(EVENTSTORE_TEST)]
     #[tokio::test]
-    async fn test() -> Result<(), DriverError> {
+    async fn basic_modification() -> Result<(), DriverError> {
         let client = create_event_store_client()?;
         let handler = EventStoreBookHandler::new(client);
         let id = BookId::new(Uuid::new_v4());

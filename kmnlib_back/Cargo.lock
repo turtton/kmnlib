@@ -2540,8 +2540,8 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vodca"
-version = "0.1.0"
-source = "git+https://github.com/turtton/vodca.git?rev=73bc4cf4ef6730e68ca948603a5358dd0d425a88#73bc4cf4ef6730e68ca948603a5358dd0d425a88"
+version = "0.1.1"
+source = "git+https://github.com/turtton/vodca.git?rev=00331f8f386680b7aff095f534cd7a99c7b1db75#00331f8f386680b7aff095f534cd7a99c7b1db75"
 dependencies = [
  "proc-macro2",
  "quote",

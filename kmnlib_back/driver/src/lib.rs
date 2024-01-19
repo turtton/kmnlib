@@ -1,8 +1,10 @@
-use crate::error::DriverError;
+use error_stack::ResultExt;
+
+use kernel::KernelError;
 
 pub mod database;
 pub mod error;
 
-pub(crate) fn env(key: &str) -> Result<String, DriverError> {
-    dotenvy::var(key).map_err(DriverError::from)
+pub(crate) fn env(key: &str) -> error_stack::Result<String, KernelError> {
+    dotenvy::var(key).change_context_lazy(|| KernelError::Internal)
 }

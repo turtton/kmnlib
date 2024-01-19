@@ -1,12 +1,13 @@
+use error_stack::ResultExt;
 use eventstore::Client;
 
 use kernel::interface::command::{BookCommand, BookCommandHandler, BOOK_STREAM_NAME};
 use kernel::interface::event::BookEvent;
 use kernel::interface::query::BookEventQuery;
 use kernel::prelude::entity::{Book, BookId, EventVersion};
+use kernel::KernelError;
 
 use crate::database::eventstore::{append_event, read_stream};
-use crate::error::DriverError;
 
 pub struct EventStoreBookHandler {
     client: Client,
@@ -20,8 +21,10 @@ impl EventStoreBookHandler {
 
 #[async_trait::async_trait]
 impl BookCommandHandler for EventStoreBookHandler {
-    type Error = DriverError;
-    async fn handle(&self, command: BookCommand) -> Result<EventVersion<Book>, DriverError> {
+    async fn handle(
+        &self,
+        command: BookCommand,
+    ) -> error_stack::Result<EventVersion<Book>, KernelError> {
         let (event_type, id, rev_version, event) = BookEvent::convert(command);
         append_event(
             &self.client,
@@ -37,12 +40,11 @@ impl BookCommandHandler for EventStoreBookHandler {
 
 #[async_trait::async_trait]
 impl BookEventQuery for EventStoreBookHandler {
-    type Error = DriverError;
     async fn get_events(
         &self,
         id: &BookId,
         since: Option<EventVersion<Book>>,
-    ) -> Result<Vec<BookEvent>, Self::Error> {
+    ) -> error_stack::Result<Vec<BookEvent>, KernelError> {
         read_stream(
             &self.client,
             BOOK_STREAM_NAME,
@@ -53,7 +55,7 @@ impl BookEventQuery for EventStoreBookHandler {
         .iter()
         .map(|event| event.as_json::<BookEvent>())
         .collect::<serde_json::Result<Vec<BookEvent>>>()
-        .map_err(DriverError::from)
+        .change_context_lazy(|| KernelError::Internal)
     }
 }
 
@@ -65,13 +67,13 @@ mod test {
     use kernel::interface::event::BookEvent;
     use kernel::interface::query::BookEventQuery;
     use kernel::prelude::entity::{BookAmount, BookId, BookTitle};
+    use kernel::KernelError;
 
     use crate::database::eventstore::{create_event_store_client, EventStoreBookHandler};
-    use crate::error::DriverError;
 
     #[test_with::env(EVENTSTORE_TEST)]
     #[tokio::test]
-    async fn basic_modification() -> Result<(), DriverError> {
+    async fn basic_modification() -> error_stack::Result<(), KernelError> {
         let client = create_event_store_client()?;
         let handler = EventStoreBookHandler::new(client);
         let id = BookId::new(Uuid::new_v4());

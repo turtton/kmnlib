@@ -1,10 +1,12 @@
+use error_stack::Report;
 use sqlx::pool::PoolConnection;
-use sqlx::{Pool, Postgres};
+use sqlx::{Error, Pool, Postgres};
 
 use kernel::interface::database::QueryDatabaseConnection;
+use kernel::KernelError;
 
 use crate::env;
-use crate::error::DriverError;
+use crate::error::ConvertError;
 
 pub use self::{book::*, rent::*, user::*};
 
@@ -19,18 +21,27 @@ pub struct PostgresDatabase {
 }
 
 impl PostgresDatabase {
-    async fn new() -> Result<Self, DriverError> {
+    async fn new() -> error_stack::Result<Self, KernelError> {
         let url = env(POSTGRES_URL)?;
-        let pool = Pool::connect(&url).await?;
+        let pool = Pool::connect(&url).await.convert_error()?;
         Ok(Self { pool })
     }
 }
 
 #[async_trait::async_trait]
 impl QueryDatabaseConnection<PoolConnection<Postgres>> for PostgresDatabase {
-    type Error = DriverError;
-    async fn transact(&self) -> Result<PoolConnection<Postgres>, DriverError> {
-        let con = self.pool.acquire().await?;
+    async fn transact(&self) -> error_stack::Result<PoolConnection<Postgres>, KernelError> {
+        let con = self.pool.acquire().await.convert_error()?;
         Ok(con)
+    }
+}
+
+impl<T> ConvertError for Result<T, Error> {
+    type Ok = T;
+    fn convert_error(self) -> error_stack::Result<T, KernelError> {
+        self.map_err(|error| match error {
+            Error::PoolTimedOut => Report::from(error).change_context(KernelError::Timeout),
+            _ => Report::from(error).change_context(KernelError::Internal),
+        })
     }
 }

@@ -1,5 +1,7 @@
-use crate::entity::{BookId, EventVersion, Rent, UserId};
 use serde::{Deserialize, Serialize};
+
+use crate::entity::{BookId, EventVersion, Rent, UserId};
+use crate::KernelError;
 
 pub static RENT_STREAM_NAME: &str = "rent-stream";
 
@@ -19,8 +21,10 @@ pub enum RentCommand {
 
 #[async_trait::async_trait]
 pub trait RentCommandHandler {
-    type Error;
-    async fn handle(&self, command: RentCommand) -> Result<EventVersion<Rent>, Self::Error>;
+    async fn handle(
+        &self,
+        command: RentCommand,
+    ) -> error_stack::Result<EventVersion<Rent>, KernelError>;
 }
 
 pub trait DependOnRentCommandHandler {

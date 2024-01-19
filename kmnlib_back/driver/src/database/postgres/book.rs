@@ -1,3 +1,4 @@
+use error_stack::Report;
 use sqlx::pool::PoolConnection;
 use sqlx::{PgConnection, Postgres};
 use uuid::Uuid;
@@ -5,32 +6,30 @@ use uuid::Uuid;
 use kernel::interface::query::BookQuery;
 use kernel::interface::update::BookModifier;
 use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
+use kernel::KernelError;
 
-use crate::error::DriverError;
+use crate::error::ConvertError;
 
 pub struct PostgresBookRepository;
 
 #[async_trait::async_trait]
 impl BookQuery<PoolConnection<Postgres>> for PostgresBookRepository {
-    type Error = DriverError;
     async fn find_by_id(
         &self,
         con: &mut PoolConnection<Postgres>,
         id: &BookId,
-    ) -> Result<Option<Book>, Self::Error> {
+    ) -> error_stack::Result<Option<Book>, KernelError> {
         PgBookInternal::find_by_id(con, id).await
     }
 }
 
 #[async_trait::async_trait]
 impl BookModifier<PoolConnection<Postgres>> for PostgresBookRepository {
-    type Error = DriverError;
-
     async fn create(
         &self,
         con: &mut PoolConnection<Postgres>,
         book: Book,
-    ) -> Result<(), Self::Error> {
+    ) -> error_stack::Result<(), KernelError> {
         PgBookInternal::create(con, book).await
     }
 
@@ -38,7 +37,7 @@ impl BookModifier<PoolConnection<Postgres>> for PostgresBookRepository {
         &self,
         con: &mut PoolConnection<Postgres>,
         book: Book,
-    ) -> Result<(), Self::Error> {
+    ) -> error_stack::Result<(), KernelError> {
         PgBookInternal::update(con, book).await
     }
 
@@ -46,7 +45,7 @@ impl BookModifier<PoolConnection<Postgres>> for PostgresBookRepository {
         &self,
         con: &mut PoolConnection<Postgres>,
         book_id: BookId,
-    ) -> Result<(), Self::Error> {
+    ) -> error_stack::Result<(), KernelError> {
         PgBookInternal::delete(con, book_id).await
     }
 }
@@ -73,7 +72,10 @@ impl From<BookRow> for Book {
 pub(in crate::database) struct PgBookInternal;
 
 impl PgBookInternal {
-    async fn find_by_id(con: &mut PgConnection, id: &BookId) -> Result<Option<Book>, DriverError> {
+    async fn find_by_id(
+        con: &mut PgConnection,
+        id: &BookId,
+    ) -> error_stack::Result<Option<Book>, KernelError> {
         let row = sqlx::query_as::<_, BookRow>(
             // language=postgresql
             r#"
@@ -84,12 +86,16 @@ impl PgBookInternal {
         )
         .bind(id.as_ref())
         .fetch_optional(con)
-        .await?;
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::PoolTimedOut => Report::from(e).change_context(KernelError::Timeout),
+            _ => Report::from(e).change_context(KernelError::Internal),
+        })?;
         let found = row.map(Book::from);
         Ok(found)
     }
 
-    async fn create(con: &mut PgConnection, book: Book) -> Result<(), DriverError> {
+    async fn create(con: &mut PgConnection, book: Book) -> error_stack::Result<(), KernelError> {
         // language=postgresql
         sqlx::query(
             r#"
@@ -102,11 +108,15 @@ impl PgBookInternal {
         .bind(book.amount().as_ref())
         .bind(book.version().as_ref())
         .execute(con)
-        .await?;
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::PoolTimedOut => Report::from(e).change_context(KernelError::Timeout),
+            _ => Report::from(e).change_context(KernelError::Internal),
+        })?;
         Ok(())
     }
 
-    async fn update(con: &mut PgConnection, book: Book) -> Result<(), DriverError> {
+    async fn update(con: &mut PgConnection, book: Book) -> error_stack::Result<(), KernelError> {
         // language=postgresql
         sqlx::query(
             r#"
@@ -119,11 +129,15 @@ impl PgBookInternal {
         .bind(book.title().as_ref())
         .bind(book.version().as_ref())
         .execute(con)
-        .await?;
+        .await
+        .convert_error()?;
         Ok(())
     }
 
-    async fn delete(con: &mut PgConnection, book_id: BookId) -> Result<(), DriverError> {
+    async fn delete(
+        con: &mut PgConnection,
+        book_id: BookId,
+    ) -> error_stack::Result<(), KernelError> {
         // language=postgresql
         sqlx::query(
             r#"
@@ -133,7 +147,8 @@ impl PgBookInternal {
         )
         .bind(book_id.as_ref())
         .execute(con)
-        .await?;
+        .await
+        .convert_error()?;
         Ok(())
     }
 }
@@ -144,14 +159,14 @@ mod test {
     use kernel::interface::query::BookQuery;
     use kernel::interface::update::BookModifier;
     use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
+    use kernel::KernelError;
 
     use crate::database::postgres::book::PostgresBookRepository;
     use crate::database::postgres::PostgresDatabase;
-    use crate::error::DriverError;
 
     #[test_with::env(POSTGRES_TEST)]
     #[tokio::test]
-    async fn test() -> Result<(), DriverError> {
+    async fn test() -> error_stack::Result<(), KernelError> {
         let db = PostgresDatabase::new().await?;
         let mut con = db.transact().await?;
         let id = BookId::new(uuid::Uuid::new_v4());

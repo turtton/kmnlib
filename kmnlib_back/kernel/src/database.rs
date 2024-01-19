@@ -1,7 +1,8 @@
+use crate::KernelError;
+
 #[async_trait::async_trait]
 pub trait QueryDatabaseConnection<Connection>: 'static + Sync + Send {
-    type Error;
-    async fn transact(&self) -> Result<Connection, Self::Error>;
+    async fn transact(&self) -> error_stack::Result<Connection, KernelError>;
 }
 
 pub trait DependOnDatabaseConnection<Connection>: 'static + Sync + Send {

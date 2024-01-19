@@ -1,10 +1,14 @@
-use crate::database::eventstore::{append_event, read_stream};
-use crate::error::DriverError;
+use error_stack::{Report, ResultExt};
 use eventstore::Client;
+
 use kernel::interface::command::{RentCommand, RentCommandHandler, RENT_STREAM_NAME};
 use kernel::interface::event::{EventInfo, RentEvent};
 use kernel::interface::query::RentEventQuery;
 use kernel::prelude::entity::{EventVersion, Rent};
+use kernel::KernelError;
+
+use crate::database::eventstore::{append_event, read_stream};
+
 pub struct EventStoreRentHandler {
     client: Client,
 }
@@ -17,8 +21,10 @@ impl EventStoreRentHandler {
 
 #[async_trait::async_trait]
 impl RentCommandHandler for EventStoreRentHandler {
-    type Error = DriverError;
-    async fn handle(&self, command: RentCommand) -> Result<EventVersion<Rent>, Self::Error> {
+    async fn handle(
+        &self,
+        command: RentCommand,
+    ) -> error_stack::Result<EventVersion<Rent>, KernelError> {
         let (event_type, expected, event) = RentEvent::convert(command);
         append_event(
             &self.client,
@@ -34,11 +40,10 @@ impl RentCommandHandler for EventStoreRentHandler {
 
 #[async_trait::async_trait]
 impl RentEventQuery for EventStoreRentHandler {
-    type Error = DriverError;
     async fn get_events(
         &self,
         since: Option<EventVersion<Rent>>,
-    ) -> Result<Vec<EventInfo<RentEvent, Rent>>, Self::Error> {
+    ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError> {
         read_stream(&self.client, RENT_STREAM_NAME, None, since)
             .await?
             .iter()
@@ -46,33 +51,33 @@ impl RentEventQuery for EventStoreRentHandler {
                 event
                     .revision
                     .try_into()
-                    .map_err(DriverError::from)
+                    .map_err(|e| Report::from(e).change_context(KernelError::Internal))
                     .and_then(|version: i64| {
                         event
                             .as_json::<RentEvent>()
                             .map(|event| EventInfo::new(event, EventVersion::new(version)))
-                            .map_err(DriverError::from)
+                            .change_context_lazy(|| KernelError::Internal)
                     })
             })
-            .collect::<Result<Vec<EventInfo<RentEvent, Rent>>, DriverError>>()
+            .collect::<error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError>>()
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::error::DriverError;
     use uuid::Uuid;
 
     use kernel::interface::command::{RentCommand, RentCommandHandler};
     use kernel::interface::event::RentEvent;
     use kernel::interface::query::RentEventQuery;
     use kernel::prelude::entity::{BookId, EventVersion, UserId};
+    use kernel::KernelError;
 
     use crate::database::eventstore::{create_event_store_client, EventStoreRentHandler};
 
     #[test_with::env(EVENTSTORE_TEST)]
     #[tokio::test]
-    async fn basic_modification() -> Result<(), DriverError> {
+    async fn basic_modification() -> error_stack::Result<(), KernelError> {
         let client = create_event_store_client()?;
         let handler = EventStoreRentHandler::new(client.clone());
 
@@ -111,9 +116,9 @@ mod test {
         Ok(())
     }
 
-    #[ignore]
     #[tokio::test]
-    async fn will_failed() -> Result<(), DriverError> {
+    async fn will_failed() -> error_stack::Result<(), KernelError> {
+        tracing_subscriber::fmt::init();
         let client = create_event_store_client()?;
         let handler = EventStoreRentHandler::new(client.clone());
 

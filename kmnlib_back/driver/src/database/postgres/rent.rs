@@ -5,28 +5,27 @@ use uuid::Uuid;
 use kernel::interface::query::RentQuery;
 use kernel::interface::update::RentModifier;
 use kernel::prelude::entity::{BookId, Rent, UserId};
+use kernel::KernelError;
 
-use crate::error::DriverError;
+use crate::error::ConvertError;
 
 pub struct PostgresRentRepository;
 
 #[async_trait::async_trait]
 impl RentQuery<PoolConnection<Postgres>> for PostgresRentRepository {
-    type Error = DriverError;
-
     async fn find_by_id(
         &self,
         con: &mut PoolConnection<Postgres>,
         book_id: &BookId,
         user_id: &UserId,
-    ) -> Result<Option<Rent>, Self::Error> {
+    ) -> error_stack::Result<Option<Rent>, KernelError> {
         PgRentInternal::find_by_id(con, book_id, user_id).await
     }
     async fn find_by_book_id(
         &self,
         con: &mut PoolConnection<Postgres>,
         book_id: &BookId,
-    ) -> Result<Vec<Rent>, Self::Error> {
+    ) -> error_stack::Result<Vec<Rent>, KernelError> {
         PgRentInternal::find_by_book_id(con, book_id).await
     }
 
@@ -34,20 +33,18 @@ impl RentQuery<PoolConnection<Postgres>> for PostgresRentRepository {
         &self,
         con: &mut PoolConnection<Postgres>,
         user_id: &UserId,
-    ) -> Result<Vec<Rent>, Self::Error> {
+    ) -> error_stack::Result<Vec<Rent>, KernelError> {
         PgRentInternal::find_by_user_id(con, user_id).await
     }
 }
 
 #[async_trait::async_trait]
 impl RentModifier<PoolConnection<Postgres>> for PostgresRentRepository {
-    type Error = DriverError;
-
     async fn create(
         &self,
         con: &mut PoolConnection<Postgres>,
         rent: &Rent,
-    ) -> Result<(), Self::Error> {
+    ) -> error_stack::Result<(), KernelError> {
         PgRentInternal::create(con, rent).await
     }
 
@@ -56,7 +53,7 @@ impl RentModifier<PoolConnection<Postgres>> for PostgresRentRepository {
         con: &mut PoolConnection<Postgres>,
         book_id: &BookId,
         user_id: &UserId,
-    ) -> Result<(), Self::Error> {
+    ) -> error_stack::Result<(), KernelError> {
         PgRentInternal::delete(con, book_id, user_id).await
     }
 }
@@ -80,7 +77,7 @@ impl PgRentInternal {
         con: &mut PgConnection,
         book_id: &BookId,
         user_id: &UserId,
-    ) -> Result<Option<Rent>, DriverError> {
+    ) -> error_stack::Result<Option<Rent>, KernelError> {
         let row = sqlx::query_as::<_, RentRow>(
             // language=postgresql
             r#"
@@ -96,14 +93,15 @@ impl PgRentInternal {
         .bind(book_id.as_ref())
         .bind(user_id.as_ref())
         .fetch_optional(con)
-        .await?;
+        .await
+        .convert_error()?;
         Ok(row.map(Rent::from))
     }
 
     async fn find_by_book_id(
         con: &mut PgConnection,
         book_id: &BookId,
-    ) -> Result<Vec<Rent>, DriverError> {
+    ) -> error_stack::Result<Vec<Rent>, KernelError> {
         let row = sqlx::query_as::<_, RentRow>(
             // language=postgresql
             r#"
@@ -118,14 +116,15 @@ impl PgRentInternal {
         )
         .bind(book_id.as_ref())
         .fetch_all(con)
-        .await?;
+        .await
+        .convert_error()?;
         Ok(row.into_iter().map(Rent::from).collect())
     }
 
     async fn find_by_user_id(
         con: &mut PgConnection,
         user_id: &UserId,
-    ) -> Result<Vec<Rent>, DriverError> {
+    ) -> error_stack::Result<Vec<Rent>, KernelError> {
         let row = sqlx::query_as::<_, RentRow>(
             // language=postgresql
             r#"
@@ -140,11 +139,12 @@ impl PgRentInternal {
         )
         .bind(user_id.as_ref())
         .fetch_all(con)
-        .await?;
+        .await
+        .convert_error()?;
         Ok(row.into_iter().map(Rent::from).collect())
     }
 
-    async fn create(con: &mut PgConnection, rent: &Rent) -> Result<(), DriverError> {
+    async fn create(con: &mut PgConnection, rent: &Rent) -> error_stack::Result<(), KernelError> {
         sqlx::query(
             // language=postgresql
             r#"
@@ -155,7 +155,8 @@ impl PgRentInternal {
         .bind(rent.book_id().as_ref())
         .bind(rent.user_id().as_ref())
         .execute(con)
-        .await?;
+        .await
+        .convert_error()?;
         Ok(())
     }
 
@@ -163,7 +164,7 @@ impl PgRentInternal {
         con: &mut PgConnection,
         book_id: &BookId,
         user_id: &UserId,
-    ) -> Result<(), DriverError> {
+    ) -> error_stack::Result<(), KernelError> {
         sqlx::query(
             // language=postgresql
             r#"
@@ -174,7 +175,8 @@ impl PgRentInternal {
         .bind(book_id.as_ref())
         .bind(user_id.as_ref())
         .execute(con)
-        .await?;
+        .await
+        .convert_error()?;
         Ok(())
     }
 }
@@ -188,15 +190,15 @@ mod test {
         Book, BookAmount, BookId, BookTitle, EventVersion, Rent, User, UserId, UserName,
         UserRentLimit,
     };
+    use kernel::KernelError;
 
     use crate::database::postgres::{
         PostgresBookRepository, PostgresDatabase, PostgresRentRepository, PostgresUserRepository,
     };
-    use crate::error::DriverError;
 
     #[test_with::env(POSTGRES_TEST)]
     #[tokio::test]
-    async fn test() -> Result<(), DriverError> {
+    async fn test() -> error_stack::Result<(), KernelError> {
         let db = PostgresDatabase::new().await?;
         let mut con = db.transact().await?;
         let book_id = BookId::new(uuid::Uuid::new_v4());

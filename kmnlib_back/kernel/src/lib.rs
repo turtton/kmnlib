@@ -1,6 +1,9 @@
+pub use crate::error::*;
+
 mod command;
 mod database;
 mod entity;
+mod error;
 mod event;
 mod modify;
 mod query;

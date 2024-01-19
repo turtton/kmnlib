@@ -1,11 +1,23 @@
 use crate::entity::{User, UserId};
+use crate::KernelError;
 
 #[async_trait::async_trait]
 pub trait UserModifier<Connection>: 'static + Sync + Send {
-    type Error;
-    async fn create(&self, con: &mut Connection, user: User) -> Result<(), Self::Error>;
-    async fn update(&self, con: &mut Connection, user: User) -> Result<(), Self::Error>;
-    async fn delete(&self, con: &mut Connection, user_id: UserId) -> Result<(), Self::Error>;
+    async fn create(
+        &self,
+        con: &mut Connection,
+        user: User,
+    ) -> error_stack::Result<(), KernelError>;
+    async fn update(
+        &self,
+        con: &mut Connection,
+        user: User,
+    ) -> error_stack::Result<(), KernelError>;
+    async fn delete(
+        &self,
+        con: &mut Connection,
+        user_id: UserId,
+    ) -> error_stack::Result<(), KernelError>;
 }
 
 pub trait DependOnUserModifier<Connection>: 'static + Sync + Send {

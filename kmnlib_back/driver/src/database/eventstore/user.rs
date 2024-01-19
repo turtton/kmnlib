@@ -1,12 +1,13 @@
+use error_stack::ResultExt;
 use eventstore::Client;
 
 use kernel::interface::command::{UserCommand, UserCommandHandler, USER_STREAM_NAME};
 use kernel::interface::event::UserEvent;
 use kernel::interface::query::UserEventQuery;
 use kernel::prelude::entity::{EventVersion, User, UserId};
+use kernel::KernelError;
 
 use crate::database::eventstore::{append_event, read_stream};
-use crate::error::DriverError;
 
 pub struct EventStoreUserHandler {
     client: Client,
@@ -20,8 +21,10 @@ impl EventStoreUserHandler {
 
 #[async_trait::async_trait]
 impl UserCommandHandler for EventStoreUserHandler {
-    type Error = DriverError;
-    async fn handle(&self, command: UserCommand) -> Result<EventVersion<User>, Self::Error> {
+    async fn handle(
+        &self,
+        command: UserCommand,
+    ) -> error_stack::Result<EventVersion<User>, KernelError> {
         let (event_type, id, _, event) = UserEvent::convert(command);
         append_event(
             &self.client,
@@ -37,12 +40,11 @@ impl UserCommandHandler for EventStoreUserHandler {
 
 #[async_trait::async_trait]
 impl UserEventQuery for EventStoreUserHandler {
-    type Error = DriverError;
     async fn get_events(
         &self,
         id: &UserId,
         since: Option<EventVersion<User>>,
-    ) -> Result<Vec<UserEvent>, Self::Error> {
+    ) -> error_stack::Result<Vec<UserEvent>, KernelError> {
         read_stream(
             &self.client,
             USER_STREAM_NAME,
@@ -53,7 +55,7 @@ impl UserEventQuery for EventStoreUserHandler {
         .iter()
         .map(|event| event.as_json::<UserEvent>())
         .collect::<serde_json::Result<Vec<UserEvent>>>()
-        .map_err(DriverError::from)
+        .change_context_lazy(|| KernelError::Internal)
     }
 }
 
@@ -65,13 +67,13 @@ mod test {
     use kernel::interface::event::UserEvent;
     use kernel::interface::query::UserEventQuery;
     use kernel::prelude::entity::{UserId, UserName, UserRentLimit};
+    use kernel::KernelError;
 
     use crate::database::eventstore::{create_event_store_client, EventStoreUserHandler};
-    use crate::error::DriverError;
 
     #[test_with::env(EVENTSTORE_TEST)]
     #[tokio::test]
-    async fn basic_modification() -> Result<(), DriverError> {
+    async fn basic_modification() -> error_stack::Result<(), KernelError> {
         let client = create_event_store_client()?;
         let handler = EventStoreUserHandler::new(client);
         let id = UserId::new(Uuid::new_v4());

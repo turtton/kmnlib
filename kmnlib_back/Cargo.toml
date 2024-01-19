@@ -13,3 +13,8 @@ authors = ["turtton"]
 
 [workspace.dependencies]
 async-trait = "0.1.74"
+
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
+
+error-stack = "0.4.1"

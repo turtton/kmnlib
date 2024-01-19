@@ -1,14 +1,14 @@
 use crate::entity::{EventVersion, User, UserId};
 use crate::event::UserEvent;
+use crate::KernelError;
 
 #[async_trait::async_trait]
 pub trait UserQuery<Connection>: Sync + Send + 'static {
-    type Error;
     async fn find_by_id(
         &self,
         con: &mut Connection,
         id: &UserId,
-    ) -> Result<Option<User>, Self::Error>;
+    ) -> error_stack::Result<Option<User>, KernelError>;
 }
 
 pub trait DependOnUserQuery<Connection>: Sync + Send + 'static {
@@ -18,12 +18,11 @@ pub trait DependOnUserQuery<Connection>: Sync + Send + 'static {
 
 #[async_trait::async_trait]
 pub trait UserEventQuery: Sync + Send + 'static {
-    type Error;
     async fn get_events(
         &self,
         id: &UserId,
         since: Option<EventVersion<User>>,
-    ) -> Result<Vec<UserEvent>, Self::Error>;
+    ) -> error_stack::Result<Vec<UserEvent>, KernelError>;
 }
 
 pub trait DependOnUserEventQuery: Sync + Send + 'static {

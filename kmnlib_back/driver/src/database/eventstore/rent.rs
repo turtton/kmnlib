@@ -63,6 +63,7 @@ impl RentEventQuery for EventStoreRentHandler {
     }
 }
 
+// These tests are causes concurrency error please run it one by one
 #[cfg(test)]
 mod test {
     use uuid::Uuid;
@@ -75,7 +76,7 @@ mod test {
 
     use crate::database::eventstore::{create_event_store_client, EventStoreRentHandler};
 
-    #[test_with::env(EVENTSTORE_TEST)]
+    #[ignore]
     #[tokio::test]
     async fn basic_modification() -> error_stack::Result<(), KernelError> {
         let client = create_event_store_client()?;
@@ -84,38 +85,53 @@ mod test {
         let book_id = BookId::new(Uuid::new_v4());
         let user_id = UserId::new(Uuid::new_v4());
 
+        let events = handler.get_events(None).await?;
+
+        let expected = events.last().map_or(EventVersion::Nothing, |event| {
+            EventVersion::new(*event.version().as_ref())
+        });
+
         let rent_command = RentCommand::Rent {
             user_id: user_id.clone(),
             book_id: book_id.clone(),
-            expected_version: EventVersion::Nothing,
+            expected_version: expected.clone(),
         };
-        let version = handler.handle(rent_command.clone()).await?;
+        let next_version = handler.handle(rent_command.clone()).await?;
 
-        assert_eq!(version, EventVersion::new(0));
+        let next_expected = EventVersion::new(expected.as_ref() + 1);
+        assert_eq!(next_version, next_expected.clone());
 
-        let events = handler.get_events(None).await?;
+        let events = handler.get_events(Some(next_expected.clone())).await?;
 
-        assert_eq!(events.len(), 1);
-        assert_eq!(events[0].version(), &EventVersion::new(0));
+        assert_eq!(
+            events.len(),
+            1,
+            "Invalid length. From: {}",
+            next_expected.as_ref()
+        );
+        assert_eq!(events[0].version(), &next_expected);
         assert_eq!(events[0].event(), &RentEvent::convert(rent_command).2);
 
         let return_command = RentCommand::Return {
             user_id: user_id.clone(),
             book_id: book_id.clone(),
-            expected_version: version,
+            expected_version: next_version,
         };
-        let version = handler.handle(return_command.clone()).await?;
+        let next_version = handler.handle(return_command.clone()).await?;
 
-        assert_eq!(version, EventVersion::new(1));
+        let expected = next_expected;
+        let next_expected = EventVersion::new(expected.as_ref() + 1);
+        assert_eq!(next_version, next_expected);
 
-        let events = handler.get_events(None).await?;
+        let events = handler.get_events(Some(expected)).await?;
         assert_eq!(events.len(), 2);
-        assert_eq!(events[1].version(), &EventVersion::new(1));
+        assert_eq!(events[1].version(), &next_expected);
         assert_eq!(events[1].event(), &RentEvent::convert(return_command).2);
 
         Ok(())
     }
 
+    #[ignore]
     #[tokio::test]
     async fn will_failed() -> error_stack::Result<(), KernelError> {
         tracing_subscriber::fmt::init();
@@ -125,10 +141,15 @@ mod test {
         let book_id = BookId::new(Uuid::new_v4());
         let user_id = UserId::new(Uuid::new_v4());
 
+        let events = handler.get_events(None).await?;
+
+        let expected = events.last().map_or(EventVersion::Nothing, |event| {
+            EventVersion::new(*event.version().as_ref())
+        });
         let rent_command = RentCommand::Rent {
             user_id: user_id.clone(),
             book_id: book_id.clone(),
-            expected_version: EventVersion::Nothing,
+            expected_version: expected,
         };
         let _ = handler.handle(rent_command.clone()).await?;
 

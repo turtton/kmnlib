@@ -78,9 +78,14 @@ pub async fn read_stream<T>(
         .read_stream(stream_name, &option)
         .await
         .convert_error()?;
+
     let mut events = Vec::new();
     loop {
-        let next = result.next().await.convert_error()?;
+        let next = result.next().await;
+        let next = match next {
+            Err(Error::ResourceNotFound) => return Ok(Vec::new()),
+            _ => next.convert_error()?,
+        };
         match next {
             Some(ResolvedEvent { event: Some(e), .. }) => events.push(e),
             None => break,

@@ -7,3 +7,10 @@ authors.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+uuid = { workspace = true }
+time = { workspace = true }
+
+kernel = { path = "../kernel" }
+async-trait = { workspace = true }
+
+error-stack = { workspace = true }

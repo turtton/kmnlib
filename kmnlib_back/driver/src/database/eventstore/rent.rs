@@ -134,7 +134,6 @@ mod test {
     #[ignore]
     #[tokio::test]
     async fn will_failed() -> error_stack::Result<(), KernelError> {
-        tracing_subscriber::fmt::init();
         let client = create_event_store_client()?;
         let handler = EventStoreRentHandler::new(client.clone());
 

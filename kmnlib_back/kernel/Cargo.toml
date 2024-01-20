@@ -6,8 +6,8 @@ authors.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-uuid = { version = "1.4", features = ["serde", "v4"] }
-time = { version = "0.3.30", features = ["serde"] }
+uuid = { workspace = true }
+time = { workspace = true }
 
 destructure = "0.5.5"
 vodca = { git = "https://github.com/turtton/vodca.git", rev = "00331f8f386680b7aff095f534cd7a99c7b1db75" }

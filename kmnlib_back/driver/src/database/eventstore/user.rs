@@ -43,7 +43,7 @@ impl UserEventQuery for EventStoreUserHandler {
     async fn get_events(
         &self,
         id: &UserId,
-        since: Option<EventVersion<User>>,
+        since: Option<&EventVersion<User>>,
     ) -> error_stack::Result<Vec<UserEvent>, KernelError> {
         read_stream(
             &self.client,

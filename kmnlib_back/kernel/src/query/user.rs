@@ -21,7 +21,7 @@ pub trait UserEventQuery: Sync + Send + 'static {
     async fn get_events(
         &self,
         id: &UserId,
-        since: Option<EventVersion<User>>,
+        since: Option<&EventVersion<User>>,
     ) -> error_stack::Result<Vec<UserEvent>, KernelError>;
 }
 

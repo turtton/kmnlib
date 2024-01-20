@@ -12,6 +12,9 @@ edition = "2021"
 authors = ["turtton"]
 
 [workspace.dependencies]
+uuid = { version = "1.4", features = ["serde", "v4"] }
+time = { version = "0.3.30", features = ["serde"] }
+
 async-trait = "0.1.74"
 
 tracing = "0.1.40"

@@ -21,7 +21,7 @@ pub trait BookEventQuery: Sync + Send + 'static {
     async fn get_events(
         &self,
         id: &BookId,
-        since: Option<EventVersion<Book>>,
+        since: Option<&EventVersion<Book>>,
     ) -> error_stack::Result<Vec<BookEvent>, KernelError>;
 }
 

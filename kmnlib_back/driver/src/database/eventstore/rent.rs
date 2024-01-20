@@ -42,7 +42,7 @@ impl RentCommandHandler for EventStoreRentHandler {
 impl RentEventQuery for EventStoreRentHandler {
     async fn get_events(
         &self,
-        since: Option<EventVersion<Rent>>,
+        since: Option<&EventVersion<Rent>>,
     ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError> {
         read_stream(&self.client, RENT_STREAM_NAME, None, since)
             .await?
@@ -101,7 +101,7 @@ mod test {
         let next_expected = EventVersion::new(expected.as_ref() + 1);
         assert_eq!(next_version, next_expected.clone());
 
-        let events = handler.get_events(Some(next_expected.clone())).await?;
+        let events = handler.get_events(Some(&next_expected.clone())).await?;
 
         assert_eq!(
             events.len(),
@@ -123,7 +123,7 @@ mod test {
         let next_expected = EventVersion::new(expected.as_ref() + 1);
         assert_eq!(next_version, next_expected);
 
-        let events = handler.get_events(Some(expected)).await?;
+        let events = handler.get_events(Some(&expected)).await?;
         assert_eq!(events.len(), 2);
         assert_eq!(events[1].version(), &next_expected);
         assert_eq!(events[1].event(), &RentEvent::convert(return_command).2);

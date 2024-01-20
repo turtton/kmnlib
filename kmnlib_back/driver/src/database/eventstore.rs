@@ -45,7 +45,7 @@ pub async fn append_event<T>(
         )?;
     let option = AppendToStreamOptions::default().expected_revision(expected_rev);
     let event =
-        EventData::json(&event_type, &event).change_context_lazy(|| KernelError::Internal)?;
+        EventData::json(&event_type, event).change_context_lazy(|| KernelError::Internal)?;
 
     let result = client
         .append_to_stream(create_stream_name(stream_name, id_str), &option, event)
@@ -62,13 +62,13 @@ pub async fn read_stream<T>(
     client: &Client,
     stream_name: &str,
     id_str: Option<&str>,
-    version: Option<EventVersion<T>>,
+    version: Option<&EventVersion<T>>,
 ) -> error_stack::Result<Vec<RecordedEvent>, KernelError> {
     let stream_name = create_stream_name(stream_name, id_str);
     let option = ReadStreamOptions::default();
     let option = match version {
         Some(EventVersion::Exact(version, ..)) => option.position(
-            u64::try_from(version)
+            u64::try_from(*version)
                 .map(StreamPosition::Position)
                 .change_context_lazy(|| KernelError::Internal)?,
         ),

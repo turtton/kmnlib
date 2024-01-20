@@ -1,3 +1,5 @@
+use crate::KernelError;
+use error_stack::{Report, ResultExt};
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
@@ -24,12 +26,13 @@ impl<T> EventVersion<T> {
     }
 }
 
-impl<T> From<i64> for EventVersion<T> {
-    fn from(version: i64) -> Self {
-        if version < 0 {
-            Self::Nothing
-        } else {
-            Self::Exact(version, PhantomData)
+impl<T> TryFrom<EventVersion<T>> for i64 {
+    type Error = Report<KernelError>;
+    fn try_from(value: EventVersion<T>) -> Result<Self, Self::Error> {
+        match value {
+            EventVersion::Nothing => Err(Report::new(KernelError::Internal))
+                .attach_printable_lazy(|| "Cannot convert EventVersion::Nothing to i64"),
+            EventVersion::Exact(version, _) => Ok(version),
         }
     }
 }

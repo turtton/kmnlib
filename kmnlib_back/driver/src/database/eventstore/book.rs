@@ -43,7 +43,7 @@ impl BookEventQuery for EventStoreBookHandler {
     async fn get_events(
         &self,
         id: &BookId,
-        since: Option<EventVersion<Book>>,
+        since: Option<&EventVersion<Book>>,
     ) -> error_stack::Result<Vec<BookEvent>, KernelError> {
         read_stream(
             &self.client,

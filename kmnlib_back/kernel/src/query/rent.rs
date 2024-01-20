@@ -32,7 +32,7 @@ pub trait DependOnRentQuery<Connection>: Sync + Send + 'static {
 pub trait RentEventQuery: Sync + Send + 'static {
     async fn get_events(
         &self,
-        since: Option<EventVersion<Rent>>,
+        since: Option<&EventVersion<Rent>>,
     ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError>;
 }
 

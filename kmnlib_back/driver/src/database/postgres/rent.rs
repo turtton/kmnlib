@@ -1,5 +1,4 @@
-use sqlx::pool::PoolConnection;
-use sqlx::{PgConnection, Postgres};
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use kernel::interface::query::RentQuery;
@@ -7,15 +6,16 @@ use kernel::interface::update::RentModifier;
 use kernel::prelude::entity::{BookId, Rent, UserId};
 use kernel::KernelError;
 
+use crate::database::postgres::PostgresConnection;
 use crate::error::ConvertError;
 
 pub struct PostgresRentRepository;
 
 #[async_trait::async_trait]
-impl RentQuery<PoolConnection<Postgres>> for PostgresRentRepository {
+impl RentQuery<PostgresConnection> for PostgresRentRepository {
     async fn find_by_id(
         &self,
-        con: &mut PoolConnection<Postgres>,
+        con: &mut PostgresConnection,
         book_id: &BookId,
         user_id: &UserId,
     ) -> error_stack::Result<Option<Rent>, KernelError> {
@@ -23,7 +23,7 @@ impl RentQuery<PoolConnection<Postgres>> for PostgresRentRepository {
     }
     async fn find_by_book_id(
         &self,
-        con: &mut PoolConnection<Postgres>,
+        con: &mut PostgresConnection,
         book_id: &BookId,
     ) -> error_stack::Result<Vec<Rent>, KernelError> {
         PgRentInternal::find_by_book_id(con, book_id).await
@@ -31,7 +31,7 @@ impl RentQuery<PoolConnection<Postgres>> for PostgresRentRepository {
 
     async fn find_by_user_id(
         &self,
-        con: &mut PoolConnection<Postgres>,
+        con: &mut PostgresConnection,
         user_id: &UserId,
     ) -> error_stack::Result<Vec<Rent>, KernelError> {
         PgRentInternal::find_by_user_id(con, user_id).await
@@ -39,10 +39,10 @@ impl RentQuery<PoolConnection<Postgres>> for PostgresRentRepository {
 }
 
 #[async_trait::async_trait]
-impl RentModifier<PoolConnection<Postgres>> for PostgresRentRepository {
+impl RentModifier<PostgresConnection> for PostgresRentRepository {
     async fn create(
         &self,
-        con: &mut PoolConnection<Postgres>,
+        con: &mut PostgresConnection,
         rent: &Rent,
     ) -> error_stack::Result<(), KernelError> {
         PgRentInternal::create(con, rent).await
@@ -50,7 +50,7 @@ impl RentModifier<PoolConnection<Postgres>> for PostgresRentRepository {
 
     async fn delete(
         &self,
-        con: &mut PoolConnection<Postgres>,
+        con: &mut PostgresConnection,
         book_id: &BookId,
         user_id: &UserId,
     ) -> error_stack::Result<(), KernelError> {

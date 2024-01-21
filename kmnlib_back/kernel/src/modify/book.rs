@@ -1,8 +1,9 @@
+use crate::database::Transaction;
 use crate::entity::{Book, BookId};
 use crate::KernelError;
 
 #[async_trait::async_trait]
-pub trait BookModifier<Connection>: 'static + Sync + Send {
+pub trait BookModifier<Connection: Transaction>: 'static + Sync + Send {
     async fn create(
         &self,
         con: &mut Connection,
@@ -20,7 +21,7 @@ pub trait BookModifier<Connection>: 'static + Sync + Send {
     ) -> error_stack::Result<(), KernelError>;
 }
 
-pub trait DependOnBookModifier<Connection>: 'static + Sync + Send {
+pub trait DependOnBookModifier<Connection: Transaction>: 'static + Sync + Send {
     type BookModifier: BookModifier<Connection>;
     fn book_modifier(&self) -> &Self::BookModifier;
 }

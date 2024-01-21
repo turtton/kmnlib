@@ -1,21 +1,21 @@
-use sqlx::pool::PoolConnection;
 use sqlx::types::Uuid;
-use sqlx::{PgConnection, Postgres};
+use sqlx::PgConnection;
 
 use kernel::interface::query::UserQuery;
 use kernel::interface::update::UserModifier;
 use kernel::prelude::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
 use kernel::KernelError;
 
+use crate::database::postgres::PostgresConnection;
 use crate::error::ConvertError;
 
 pub struct PostgresUserRepository;
 
 #[async_trait::async_trait]
-impl UserQuery<PoolConnection<Postgres>> for PostgresUserRepository {
+impl UserQuery<PostgresConnection> for PostgresUserRepository {
     async fn find_by_id(
         &self,
-        con: &mut PoolConnection<Postgres>,
+        con: &mut PostgresConnection,
         id: &UserId,
     ) -> error_stack::Result<Option<User>, KernelError> {
         PgUserInternal::find_by_id(con, id).await
@@ -23,10 +23,10 @@ impl UserQuery<PoolConnection<Postgres>> for PostgresUserRepository {
 }
 
 #[async_trait::async_trait]
-impl UserModifier<PoolConnection<Postgres>> for PostgresUserRepository {
+impl UserModifier<PostgresConnection> for PostgresUserRepository {
     async fn create(
         &self,
-        con: &mut PoolConnection<Postgres>,
+        con: &mut PostgresConnection,
         user: User,
     ) -> error_stack::Result<(), KernelError> {
         PgUserInternal::create(con, user).await
@@ -34,7 +34,7 @@ impl UserModifier<PoolConnection<Postgres>> for PostgresUserRepository {
 
     async fn update(
         &self,
-        con: &mut PoolConnection<Postgres>,
+        con: &mut PostgresConnection,
         user: User,
     ) -> error_stack::Result<(), KernelError> {
         PgUserInternal::update(con, user).await
@@ -42,7 +42,7 @@ impl UserModifier<PoolConnection<Postgres>> for PostgresUserRepository {
 
     async fn delete(
         &self,
-        con: &mut PoolConnection<Postgres>,
+        con: &mut PostgresConnection,
         user_id: UserId,
     ) -> error_stack::Result<(), KernelError> {
         PgUserInternal::delete(con, user_id).await

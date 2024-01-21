@@ -1,7 +1,9 @@
 use crate::transfer::UserDto;
 use error_stack::Report;
-use kernel::interface::database::{DependOnDatabaseConnection, QueryDatabaseConnection};
-use kernel::interface::event::{DestructEventInfo, UserEvent};
+use kernel::interface::database::{
+    DependOnDatabaseConnection, QueryDatabaseConnection, Transaction,
+};
+use kernel::interface::event::UserEvent;
 use kernel::interface::query::{
     DependOnUserEventQuery, DependOnUserQuery, UserEventQuery, UserQuery,
 };
@@ -10,7 +12,7 @@ use kernel::KernelError;
 use uuid::Uuid;
 
 #[async_trait::async_trait]
-pub trait GetUserService<Connection: Send>:
+pub trait GetUserService<Connection: Transaction + Send>:
     'static
     + Sync
     + Send

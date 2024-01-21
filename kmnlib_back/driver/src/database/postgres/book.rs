@@ -1,6 +1,5 @@
 use error_stack::Report;
-use sqlx::pool::PoolConnection;
-use sqlx::{PgConnection, Postgres};
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use kernel::interface::query::BookQuery;
@@ -8,15 +7,16 @@ use kernel::interface::update::BookModifier;
 use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
 use kernel::KernelError;
 
+use crate::database::postgres::PostgresConnection;
 use crate::error::ConvertError;
 
 pub struct PostgresBookRepository;
 
 #[async_trait::async_trait]
-impl BookQuery<PoolConnection<Postgres>> for PostgresBookRepository {
+impl BookQuery<PostgresConnection> for PostgresBookRepository {
     async fn find_by_id(
         &self,
-        con: &mut PoolConnection<Postgres>,
+        con: &mut PostgresConnection,
         id: &BookId,
     ) -> error_stack::Result<Option<Book>, KernelError> {
         PgBookInternal::find_by_id(con, id).await
@@ -24,10 +24,10 @@ impl BookQuery<PoolConnection<Postgres>> for PostgresBookRepository {
 }
 
 #[async_trait::async_trait]
-impl BookModifier<PoolConnection<Postgres>> for PostgresBookRepository {
+impl BookModifier<PostgresConnection> for PostgresBookRepository {
     async fn create(
         &self,
-        con: &mut PoolConnection<Postgres>,
+        con: &mut PostgresConnection,
         book: Book,
     ) -> error_stack::Result<(), KernelError> {
         PgBookInternal::create(con, book).await
@@ -35,7 +35,7 @@ impl BookModifier<PoolConnection<Postgres>> for PostgresBookRepository {
 
     async fn update(
         &self,
-        con: &mut PoolConnection<Postgres>,
+        con: &mut PostgresConnection,
         book: Book,
     ) -> error_stack::Result<(), KernelError> {
         PgBookInternal::update(con, book).await
@@ -43,7 +43,7 @@ impl BookModifier<PoolConnection<Postgres>> for PostgresBookRepository {
 
     async fn delete(
         &self,
-        con: &mut PoolConnection<Postgres>,
+        con: &mut PostgresConnection,
         book_id: BookId,
     ) -> error_stack::Result<(), KernelError> {
         PgBookInternal::delete(con, book_id).await

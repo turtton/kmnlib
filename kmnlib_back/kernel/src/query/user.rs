@@ -1,9 +1,10 @@
+use crate::database::Transaction;
 use crate::entity::{EventVersion, User, UserId};
 use crate::event::{EventInfo, UserEvent};
 use crate::KernelError;
 
 #[async_trait::async_trait]
-pub trait UserQuery<Connection>: Sync + Send + 'static {
+pub trait UserQuery<Connection: Transaction>: Sync + Send + 'static {
     async fn find_by_id(
         &self,
         con: &mut Connection,
@@ -11,7 +12,7 @@ pub trait UserQuery<Connection>: Sync + Send + 'static {
     ) -> error_stack::Result<Option<User>, KernelError>;
 }
 
-pub trait DependOnUserQuery<Connection>: Sync + Send + 'static {
+pub trait DependOnUserQuery<Connection: Transaction>: Sync + Send + 'static {
     type UserQuery: UserQuery<Connection>;
     fn user_query(&self) -> &Self::UserQuery;
 }

@@ -1,2 +1,3 @@
-mod eventstore;
+pub use postgres::*;
+
 mod postgres;

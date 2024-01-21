@@ -1,8 +1,10 @@
-use crate::command::BookCommand;
-use crate::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
 use serde::{Deserialize, Serialize};
 
+use crate::command::BookCommand;
+use crate::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
+
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type")]
 pub enum BookEvent {
     Created {
         title: BookTitle,
@@ -16,19 +18,19 @@ pub enum BookEvent {
 }
 
 impl BookEvent {
-    pub fn convert(command: BookCommand) -> (String, BookId, Option<EventVersion<Book>>, Self) {
+    pub fn convert(command: BookCommand) -> (BookId, Option<EventVersion<Book>>, Self) {
         match command {
             BookCommand::Create { id, title, amount } => {
                 let event = Self::Created { title, amount };
-                ("created-book".to_string(), id, None, event)
+                (id, None, event)
             }
             BookCommand::Update { id, title, amount } => {
                 let event = Self::Updated { title, amount };
-                ("updated-book".to_string(), id, None, event)
+                (id, None, event)
             }
             BookCommand::Delete { id } => {
                 let event = Self::Deleted;
-                ("deleted-book".to_string(), id, None, event)
+                (id, None, event)
             }
         }
     }

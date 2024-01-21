@@ -1,8 +1,10 @@
 use error_stack::Report;
-use sqlx::PgConnection;
+use sqlx::{types, PgConnection};
 use uuid::Uuid;
 
-use kernel::interface::query::BookQuery;
+use kernel::interface::command::{BookCommand, BookCommandHandler};
+use kernel::interface::event::{BookEvent, EventInfo};
+use kernel::interface::query::{BookEventQuery, BookQuery};
 use kernel::interface::update::BookModifier;
 use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
 use kernel::KernelError;
@@ -50,6 +52,29 @@ impl BookModifier<PostgresConnection> for PostgresBookRepository {
     }
 }
 
+#[async_trait::async_trait]
+impl BookCommandHandler<PostgresConnection> for PostgresBookRepository {
+    async fn handle(
+        &self,
+        con: &mut PostgresConnection,
+        command: BookCommand,
+    ) -> error_stack::Result<(), KernelError> {
+        PgBookInternal::command_handle(con, command).await
+    }
+}
+
+#[async_trait::async_trait]
+impl BookEventQuery<PostgresConnection> for PostgresBookRepository {
+    async fn get_events(
+        &self,
+        con: &mut PostgresConnection,
+        id: &BookId,
+        since: Option<&EventVersion<Book>>,
+    ) -> error_stack::Result<Vec<EventInfo<BookEvent, Book>>, KernelError> {
+        PgBookInternal::get_events(con, id, since).await
+    }
+}
+
 #[derive(sqlx::FromRow)]
 struct BookRow {
     id: Uuid,
@@ -66,6 +91,18 @@ impl From<BookRow> for Book {
             BookAmount::new(value.amount),
             EventVersion::new(value.version),
         )
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct BookEventRow {
+    id: i64,
+    event: types::Json<BookEvent>,
+}
+
+impl From<BookEventRow> for EventInfo<BookEvent, Book> {
+    fn from(value: BookEventRow) -> Self {
+        EventInfo::new(value.event.0, EventVersion::new(value.id))
     }
 }
 
@@ -150,6 +187,77 @@ impl PgBookInternal {
         .await
         .convert_error()?;
         Ok(())
+    }
+
+    async fn command_handle(
+        con: &mut PgConnection,
+        command: BookCommand,
+    ) -> error_stack::Result<(), KernelError> {
+        let (book_id, event_version, event) = BookEvent::convert(command);
+        match event_version {
+            None => {
+                // language=postgresql
+                sqlx::query(
+                    r#"
+                    INSERT INTO book_events (book_id, event)
+                    VALUES ($1, $2)
+                    "#,
+                )
+                .bind(book_id.as_ref())
+                .bind(types::Json::from(event))
+                .execute(con)
+                .await
+                .convert_error()?;
+            }
+            Some(version) => {
+                // language=postgresql
+                sqlx::query(
+                    r#"
+                    INSERT INTO book_events (id, book_id, event)
+                    VALUES ($1, $2, $3)
+                    "#,
+                )
+                .bind(version.as_ref())
+                .bind(book_id.as_ref())
+                .bind(types::Json::from(event))
+                .execute(con)
+                .await
+                .convert_error()?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn get_events(
+        con: &mut PgConnection,
+        id: &BookId,
+        since: Option<&EventVersion<Book>>,
+    ) -> error_stack::Result<Vec<EventInfo<BookEvent, Book>>, KernelError> {
+        let row = match since {
+            Some(version) => {
+                // language=postgresql
+                sqlx::query_as::<_, BookEventRow>(
+                    r#"
+            SELECT id, event FROM book_events where id > $1 AND book_id = $2
+            "#,
+                )
+                .bind(version.as_ref())
+            }
+            None => {
+                // language=postgresql
+                sqlx::query_as::<_, BookEventRow>(
+                    r#"
+            SELECT id, event FROM book_events where book_id = $1
+            "#,
+                )
+            }
+        }
+        .bind(id.as_ref())
+        .fetch_all(con)
+        .await
+        .convert_error()?;
+
+        Ok(row.into_iter().map(Into::into).collect())
     }
 }
 

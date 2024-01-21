@@ -1,5 +1,6 @@
-use crate::transfer::UserDto;
 use error_stack::Report;
+use uuid::Uuid;
+
 use kernel::interface::database::{
     DependOnDatabaseConnection, QueryDatabaseConnection, Transaction,
 };
@@ -9,7 +10,8 @@ use kernel::interface::query::{
 };
 use kernel::prelude::entity::{EventVersion, User, UserId};
 use kernel::KernelError;
-use uuid::Uuid;
+
+use crate::transfer::UserDto;
 
 #[async_trait::async_trait]
 pub trait GetUserService<Connection: Transaction + Send>:
@@ -18,7 +20,7 @@ pub trait GetUserService<Connection: Transaction + Send>:
     + Send
     + DependOnDatabaseConnection<Connection>
     + DependOnUserQuery<Connection>
-    + DependOnUserEventQuery
+    + DependOnUserEventQuery<Connection>
 {
     async fn get_user(&mut self, id: Uuid) -> error_stack::Result<Option<UserDto>, KernelError> {
         let mut connection = self.database_connection().transact().await?;
@@ -27,7 +29,10 @@ pub trait GetUserService<Connection: Transaction + Send>:
         let user = self.user_query().find_by_id(&mut connection, &id).await?;
 
         let version = user.as_ref().map(|u| u.version());
-        let mut user_events = self.user_event_query().get_events(&id, version).await?;
+        let mut user_events = self
+            .user_event_query()
+            .get_events(&mut connection, &id, version)
+            .await?;
 
         let user = match user {
             None => {

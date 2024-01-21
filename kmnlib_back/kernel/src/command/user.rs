@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
+use crate::database::Transaction;
+use crate::entity::{UserId, UserName, UserRentLimit};
 use crate::KernelError;
 
 pub static USER_STREAM_NAME: &str = "user-stream";
@@ -23,14 +24,15 @@ pub enum UserCommand {
 }
 
 #[async_trait::async_trait]
-pub trait UserCommandHandler: Sync + Send + 'static {
+pub trait UserCommandHandler<Connection: Transaction>: Sync + Send + 'static {
     async fn handle(
         &self,
+        con: &mut Connection,
         command: UserCommand,
-    ) -> error_stack::Result<EventVersion<User>, KernelError>;
+    ) -> error_stack::Result<(), KernelError>;
 }
 
-pub trait DependOnUserCommandHandler: Sync + Send + 'static {
-    type UserCommandHandler: UserCommandHandler;
+pub trait DependOnUserCommandHandler<Connection: Transaction>: Sync + Send + 'static {
+    type UserCommandHandler: UserCommandHandler<Connection>;
     fn user_command_handler(&self) -> &Self::UserCommandHandler;
 }

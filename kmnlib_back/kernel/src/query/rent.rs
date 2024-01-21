@@ -30,14 +30,15 @@ pub trait DependOnRentQuery<Connection: Transaction>: Sync + Send + 'static {
 }
 
 #[async_trait::async_trait]
-pub trait RentEventQuery: Sync + Send + 'static {
+pub trait RentEventQuery<Connection: Transaction>: Sync + Send + 'static {
     async fn get_events(
         &self,
+        con: &mut Connection,
         since: Option<&EventVersion<Rent>>,
     ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError>;
 }
 
-pub trait DependOnRentEventQuery: Sync + Send + 'static {
-    type RentEventQuery: RentEventQuery;
+pub trait DependOnRentEventQuery<Connection: Transaction>: Sync + Send + 'static {
+    type RentEventQuery: RentEventQuery<Connection>;
     fn rent_event_query(&self) -> &Self::RentEventQuery;
 }

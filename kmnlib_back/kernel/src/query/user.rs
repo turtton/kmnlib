@@ -18,15 +18,16 @@ pub trait DependOnUserQuery<Connection: Transaction>: Sync + Send + 'static {
 }
 
 #[async_trait::async_trait]
-pub trait UserEventQuery: Sync + Send + 'static {
+pub trait UserEventQuery<Connection: Transaction>: Sync + Send + 'static {
     async fn get_events(
         &self,
+        con: &mut Connection,
         id: &UserId,
         since: Option<&EventVersion<User>>,
     ) -> error_stack::Result<Vec<EventInfo<UserEvent, User>>, KernelError>;
 }
 
-pub trait DependOnUserEventQuery: Sync + Send + 'static {
-    type UserEventQuery: UserEventQuery;
+pub trait DependOnUserEventQuery<Connection: Transaction>: Sync + Send + 'static {
+    type UserEventQuery: UserEventQuery<Connection>;
     fn user_event_query(&self) -> &Self::UserEventQuery;
 }

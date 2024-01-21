@@ -1,9 +1,11 @@
-use sqlx::PgConnection;
+use kernel::interface::command::{RentCommand, RentCommandHandler};
+use kernel::interface::event::{EventInfo, RentEvent};
+use sqlx::{types, PgConnection};
 use uuid::Uuid;
 
-use kernel::interface::query::RentQuery;
+use kernel::interface::query::{RentEventQuery, RentQuery};
 use kernel::interface::update::RentModifier;
-use kernel::prelude::entity::{BookId, Rent, UserId};
+use kernel::prelude::entity::{BookId, EventVersion, Rent, UserId};
 use kernel::KernelError;
 
 use crate::database::postgres::PostgresConnection;
@@ -58,6 +60,28 @@ impl RentModifier<PostgresConnection> for PostgresRentRepository {
     }
 }
 
+#[async_trait::async_trait]
+impl RentCommandHandler<PostgresConnection> for PostgresRentRepository {
+    async fn handle(
+        &self,
+        con: &mut PostgresConnection,
+        command: RentCommand,
+    ) -> error_stack::Result<(), KernelError> {
+        PgRentInternal::handle_command(con, command).await
+    }
+}
+
+#[async_trait::async_trait]
+impl RentEventQuery<PostgresConnection> for PostgresRentRepository {
+    async fn get_events(
+        &self,
+        con: &mut PostgresConnection,
+        since: Option<&EventVersion<Rent>>,
+    ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError> {
+        PgRentInternal::get_events(con, since).await
+    }
+}
+
 #[derive(sqlx::FromRow)]
 struct RentRow {
     book_id: Uuid,
@@ -67,6 +91,18 @@ struct RentRow {
 impl From<RentRow> for Rent {
     fn from(value: RentRow) -> Self {
         Rent::new(BookId::new(value.book_id), UserId::new(value.user_id))
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct RentEventRow {
+    id: i64,
+    event: types::Json<RentEvent>,
+}
+
+impl From<RentEventRow> for EventInfo<RentEvent, Rent> {
+    fn from(value: RentEventRow) -> Self {
+        EventInfo::new(value.event.0, EventVersion::new(value.id))
     }
 }
 
@@ -178,6 +214,76 @@ impl PgRentInternal {
         .await
         .convert_error()?;
         Ok(())
+    }
+
+    async fn handle_command(
+        con: &mut PgConnection,
+        command: RentCommand,
+    ) -> error_stack::Result<(), KernelError> {
+        let (event_version, event) = RentEvent::convert(command);
+        match event_version {
+            None => {
+                // language=postgresql
+                sqlx::query(
+                    r#"
+                    INSERT INTO rent_events (event)
+                    VALUES ($1)
+                    "#,
+                )
+                .bind(types::Json::from(event))
+                .execute(con)
+                .await
+                .convert_error()?;
+            }
+            Some(version) => {
+                // language=postgresql
+                sqlx::query(
+                    r#"
+                    INSERT INTO rent_events (id, event)
+                    VALUES ($1, $2)
+                    "#,
+                )
+                .bind(version.as_ref())
+                .bind(types::Json::from(event))
+                .execute(con)
+                .await
+                .convert_error()?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn get_events(
+        con: &mut PgConnection,
+        since: Option<&EventVersion<Rent>>,
+    ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError> {
+        let row = match since {
+            None => {
+                // language=postgresql
+                sqlx::query_as::<_, RentEventRow>(
+                    r#"
+                    SELECT id, event
+                    FROM rent_events
+                    "#,
+                )
+            }
+            Some(version) => {
+                // language=postgresql
+                sqlx::query_as::<_, RentEventRow>(
+                    r#"
+                    SELECT id, event
+                    FROM rent_events
+                    WHERE id > $1
+                    "#,
+                )
+                .bind(version.as_ref())
+            }
+        }
+        .fetch_all(con)
+        .await
+        .convert_error()?;
+
+        Ok(row.into_iter().map(EventInfo::from).collect())
     }
 }
 

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::database::Transaction;
 use crate::entity::{BookId, EventVersion, Rent, UserId};
 use crate::KernelError;
 
@@ -20,14 +21,15 @@ pub enum RentCommand {
 }
 
 #[async_trait::async_trait]
-pub trait RentCommandHandler {
+pub trait RentCommandHandler<Connection: Transaction> {
     async fn handle(
         &self,
+        con: &mut Connection,
         command: RentCommand,
-    ) -> error_stack::Result<EventVersion<Rent>, KernelError>;
+    ) -> error_stack::Result<(), KernelError>;
 }
 
-pub trait DependOnRentCommandHandler {
-    type RentCommandHandler: RentCommandHandler;
+pub trait DependOnRentCommandHandler<Connection: Transaction> {
+    type RentCommandHandler: RentCommandHandler<Connection>;
     fn rent_command_handler(&self) -> &Self::RentCommandHandler;
 }

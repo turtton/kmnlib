@@ -1,7 +1,9 @@
 use sqlx::types::Uuid;
-use sqlx::PgConnection;
+use sqlx::{types, PgConnection};
 
-use kernel::interface::query::UserQuery;
+use kernel::interface::command::{UserCommand, UserCommandHandler};
+use kernel::interface::event::{EventInfo, UserEvent};
+use kernel::interface::query::{UserEventQuery, UserQuery};
 use kernel::interface::update::UserModifier;
 use kernel::prelude::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
 use kernel::KernelError;
@@ -49,6 +51,29 @@ impl UserModifier<PostgresConnection> for PostgresUserRepository {
     }
 }
 
+#[async_trait::async_trait]
+impl UserCommandHandler<PostgresConnection> for PostgresUserRepository {
+    async fn handle(
+        &self,
+        con: &mut PostgresConnection,
+        command: UserCommand,
+    ) -> error_stack::Result<(), KernelError> {
+        PgUserInternal::command_handle(con, command).await
+    }
+}
+
+#[async_trait::async_trait]
+impl UserEventQuery<PostgresConnection> for PostgresUserRepository {
+    async fn get_events(
+        &self,
+        con: &mut PostgresConnection,
+        id: &UserId,
+        since: Option<&EventVersion<User>>,
+    ) -> error_stack::Result<Vec<EventInfo<UserEvent, User>>, KernelError> {
+        PgUserInternal::get_events(con, id, since).await
+    }
+}
+
 #[derive(sqlx::FromRow)]
 struct UserRow {
     id: Uuid,
@@ -65,6 +90,18 @@ impl From<UserRow> for User {
             UserRentLimit::new(row.rent_limit),
             EventVersion::new(row.version),
         )
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct UserEventRow {
+    id: i64,
+    event: types::Json<UserEvent>,
+}
+
+impl From<UserEventRow> for EventInfo<UserEvent, User> {
+    fn from(value: UserEventRow) -> Self {
+        EventInfo::new(value.event.0, EventVersion::new(value.id))
     }
 }
 
@@ -143,6 +180,79 @@ impl PgUserInternal {
         .await
         .convert_error()?;
         Ok(())
+    }
+
+    async fn command_handle(
+        con: &mut PgConnection,
+        command: UserCommand,
+    ) -> error_stack::Result<(), KernelError> {
+        let (user_id, event_version, event) = UserEvent::convert(command);
+        match event_version {
+            None => {
+                // language=postgresql
+                sqlx::query(
+                    r#"
+                    INSERT INTO user_events (user_id, event) VALUES ($1, $2)
+                    "#,
+                )
+                .bind(user_id.as_ref())
+                .bind(types::Json::from(event))
+                .execute(con)
+                .await
+                .convert_error()?;
+            }
+            Some(version) => {
+                // language=postgresql
+                sqlx::query(
+                    r#"
+                    INSERT INTO user_events (id, user_id, event) VALUES ($1, $2, $3)
+                    "#,
+                )
+                .bind(version.as_ref())
+                .bind(user_id.as_ref())
+                .bind(types::Json::from(event))
+                .execute(con)
+                .await
+                .convert_error()?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn get_events(
+        con: &mut PgConnection,
+        id: &UserId,
+        since: Option<&EventVersion<User>>,
+    ) -> error_stack::Result<Vec<EventInfo<UserEvent, User>>, KernelError> {
+        let row = match since {
+            None => {
+                // language=postgresql
+                sqlx::query_as::<_, UserEventRow>(
+                    r#"
+                    SELECT id, event
+                    FROM user_events
+                    WHERE user_id = $1
+                    "#,
+                )
+            }
+            Some(version) => {
+                // language=postgresql
+                sqlx::query_as::<_, UserEventRow>(
+                    r#"
+                    SELECT id, event
+                    FROM user_events
+                    WHERE id > $2 AND user_id = $1
+                    "#,
+                )
+                .bind(version.as_ref())
+            }
+        }
+        .bind(id.as_ref())
+        .fetch_all(con)
+        .await
+        .convert_error()?;
+
+        Ok(row.into_iter().map(EventInfo::from).collect())
     }
 }
 

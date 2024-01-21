@@ -3,7 +3,7 @@ use std::ops::{Deref, DerefMut};
 use error_stack::Report;
 use sqlx::pool::PoolConnection;
 use sqlx::postgres::any::AnyConnectionBackend;
-use sqlx::{Error, Pool, Postgres};
+use sqlx::{Error, PgConnection, Pool, Postgres};
 
 use kernel::interface::database::{QueryDatabaseConnection, Transaction};
 use kernel::KernelError;
@@ -45,7 +45,7 @@ impl Transaction for PostgresConnection {
 }
 
 impl Deref for PostgresConnection {
-    type Target = PoolConnection<Postgres>;
+    type Target = PgConnection;
 
     fn deref(&self) -> &Self::Target {
         &self.0

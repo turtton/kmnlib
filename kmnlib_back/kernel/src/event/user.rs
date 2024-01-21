@@ -1,8 +1,10 @@
-use crate::command::UserCommand;
-use crate::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
 use serde::{Deserialize, Serialize};
 
+use crate::command::UserCommand;
+use crate::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
+
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type")]
 pub enum UserEvent {
     Created {
         name: UserName,
@@ -16,7 +18,7 @@ pub enum UserEvent {
 }
 
 impl UserEvent {
-    pub fn convert(command: UserCommand) -> (String, UserId, Option<EventVersion<User>>, Self) {
+    pub fn convert(command: UserCommand) -> (UserId, Option<EventVersion<User>>, Self) {
         match command {
             UserCommand::Create {
                 id,
@@ -24,7 +26,7 @@ impl UserEvent {
                 rent_limit,
             } => {
                 let event = Self::Created { name, rent_limit };
-                ("created-user".to_string(), id, None, event)
+                (id, None, event)
             }
             UserCommand::Update {
                 id,
@@ -32,11 +34,11 @@ impl UserEvent {
                 rent_limit,
             } => {
                 let event = Self::Updated { name, rent_limit };
-                ("updated-user".to_string(), id, None, event)
+                (id, None, event)
             }
             UserCommand::Delete { id } => {
                 let event = Self::Deleted;
-                ("deleted-user".to_string(), id, None, event)
+                (id, None, event)
             }
         }
     }

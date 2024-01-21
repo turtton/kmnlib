@@ -3,7 +3,7 @@ use kernel::prelude::entity::{DestructUser, User};
 use kernel::KernelError;
 use uuid::Uuid;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UserDto {
     pub id: Uuid,
     pub name: String,
@@ -27,4 +27,12 @@ impl TryFrom<User> for UserDto {
             version: version.try_into()?,
         })
     }
+}
+
+pub struct GetUserDto {
+    pub id: Uuid,
+}
+
+pub struct RemoveUserDto {
+    pub id: Uuid,
 }

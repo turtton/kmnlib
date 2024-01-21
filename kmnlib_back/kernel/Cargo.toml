@@ -9,9 +9,9 @@ authors.workspace = true
 uuid = { workspace = true }
 time = { workspace = true }
 
-destructure = "0.5.5"
+destructure = "0.5.6"
 vodca = { git = "https://github.com/turtton/vodca.git", rev = "00331f8f386680b7aff095f534cd7a99c7b1db75" }
-serde = { version = "1.0.193", features = ["derive"] }
+serde = { workspace = true }
 
 async-trait = { workspace = true }
 

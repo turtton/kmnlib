@@ -46,7 +46,7 @@ impl RentEventQuery for EventStoreRentHandler {
     ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError> {
         read_stream(&self.client, RENT_STREAM_NAME, None, since)
             .await?
-            .iter()
+            .into_iter()
             .map(|event| {
                 event
                     .revision

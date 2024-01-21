@@ -1,10 +1,10 @@
-use error_stack::ResultExt;
+use error_stack::{FutureExt, Report, ResultExt};
 use eventstore::Client;
 
 use kernel::interface::command::{BookCommand, BookCommandHandler, BOOK_STREAM_NAME};
-use kernel::interface::event::BookEvent;
+use kernel::interface::event::{BookEvent, EventInfo, UserEvent};
 use kernel::interface::query::BookEventQuery;
-use kernel::prelude::entity::{Book, BookId, EventVersion};
+use kernel::prelude::entity::{Book, BookId, EventVersion, User};
 use kernel::KernelError;
 
 use crate::database::eventstore::{append_event, read_stream};
@@ -44,7 +44,7 @@ impl BookEventQuery for EventStoreBookHandler {
         &self,
         id: &BookId,
         since: Option<&EventVersion<Book>>,
-    ) -> error_stack::Result<Vec<BookEvent>, KernelError> {
+    ) -> error_stack::Result<Vec<EventInfo<BookEvent, Book>>, KernelError> {
         read_stream(
             &self.client,
             BOOK_STREAM_NAME,
@@ -52,10 +52,20 @@ impl BookEventQuery for EventStoreBookHandler {
             since,
         )
         .await?
-        .iter()
-        .map(|event| event.as_json::<BookEvent>())
-        .collect::<serde_json::Result<Vec<BookEvent>>>()
-        .change_context_lazy(|| KernelError::Internal)
+        .into_iter()
+        .map(|event| {
+            event
+                .revision
+                .try_into()
+                .map_err(|e| Report::from(e).change_context(KernelError::Internal))
+                .and_then(|version: i64| {
+                    event
+                        .as_json::<BookEvent>()
+                        .map(|event| EventInfo::new(event, EventVersion::new(version)))
+                        .change_context_lazy(|| KernelError::Internal)
+                })
+        })
+        .collect::<error_stack::Result<Vec<EventInfo<BookEvent, Book>>, KernelError>>()
     }
 }
 

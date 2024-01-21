@@ -1,8 +1,8 @@
-use error_stack::ResultExt;
+use error_stack::{Report, ResultExt};
 use eventstore::Client;
 
 use kernel::interface::command::{UserCommand, UserCommandHandler, USER_STREAM_NAME};
-use kernel::interface::event::UserEvent;
+use kernel::interface::event::{EventInfo, UserEvent};
 use kernel::interface::query::UserEventQuery;
 use kernel::prelude::entity::{EventVersion, User, UserId};
 use kernel::KernelError;
@@ -44,7 +44,7 @@ impl UserEventQuery for EventStoreUserHandler {
         &self,
         id: &UserId,
         since: Option<&EventVersion<User>>,
-    ) -> error_stack::Result<Vec<UserEvent>, KernelError> {
+    ) -> error_stack::Result<Vec<EventInfo<UserEvent, User>>, KernelError> {
         read_stream(
             &self.client,
             USER_STREAM_NAME,
@@ -52,10 +52,20 @@ impl UserEventQuery for EventStoreUserHandler {
             since,
         )
         .await?
-        .iter()
-        .map(|event| event.as_json::<UserEvent>())
-        .collect::<serde_json::Result<Vec<UserEvent>>>()
-        .change_context_lazy(|| KernelError::Internal)
+        .into_iter()
+        .map(|event| {
+            event
+                .revision
+                .try_into()
+                .map_err(|e| Report::from(e).change_context(KernelError::Internal))
+                .and_then(|version: i64| {
+                    event
+                        .as_json::<UserEvent>()
+                        .map(|event| EventInfo::new(event, EventVersion::new(version)))
+                        .change_context_lazy(|| KernelError::Internal)
+                })
+        })
+        .collect::<error_stack::Result<Vec<EventInfo<UserEvent, User>>, KernelError>>()
     }
 }
 

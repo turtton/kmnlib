@@ -4,9 +4,10 @@ mod user;
 
 pub use self::{book::*, rent::*, user::*};
 use crate::entity::EventVersion;
+use destructure::Destructure;
 use vodca::References;
 
-#[derive(Debug, Clone, Eq, PartialEq, References)]
+#[derive(Debug, Clone, Eq, PartialEq, References, Destructure)]
 pub struct EventInfo<Event, Entity> {
     event: Event,
     version: EventVersion<Entity>,

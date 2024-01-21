@@ -1,5 +1,5 @@
 use crate::entity::{Book, BookId, EventVersion};
-use crate::event::BookEvent;
+use crate::event::{BookEvent, EventInfo};
 use crate::KernelError;
 
 #[async_trait::async_trait]
@@ -22,7 +22,7 @@ pub trait BookEventQuery: Sync + Send + 'static {
         &self,
         id: &BookId,
         since: Option<&EventVersion<Book>>,
-    ) -> error_stack::Result<Vec<BookEvent>, KernelError>;
+    ) -> error_stack::Result<Vec<EventInfo<BookEvent, Book>>, KernelError>;
 }
 
 pub trait DependOnBookEventQuery: Sync + Send + 'static {

@@ -363,9 +363,9 @@ dependencies = [
 
 [[package]]
 name = "destructure"
-version = "0.5.5"
+version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c462ef160356591828566abc5d6e20065e48f5717c1ef509df105127251fb9c"
+checksum = "cfd72fa5c0aa087c0ce4f7039c664b106d638a61a6088663415b34bf4e803881"
 dependencies = [
  "quote",
  "syn 2.0.48",

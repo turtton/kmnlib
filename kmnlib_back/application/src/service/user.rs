@@ -1,7 +1,7 @@
 use crate::transfer::UserDto;
 use error_stack::Report;
 use kernel::interface::database::{DependOnDatabaseConnection, QueryDatabaseConnection};
-use kernel::interface::event::UserEvent;
+use kernel::interface::event::{DestructEventInfo, UserEvent};
 use kernel::interface::query::{
     DependOnUserEventQuery, DependOnUserQuery, UserEventQuery, UserQuery,
 };
@@ -18,7 +18,7 @@ pub trait GetUserService<Connection: Send>:
     + DependOnUserQuery<Connection>
     + DependOnUserEventQuery
 {
-    async fn get_user(&self, id: Uuid) -> error_stack::Result<Option<UserDto>, KernelError> {
+    async fn get_user(&mut self, id: Uuid) -> error_stack::Result<Option<UserDto>, KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
         let id = UserId::new(id);
@@ -32,14 +32,18 @@ pub trait GetUserService<Connection: Send>:
                 if user_events.is_empty() {
                     None
                 } else {
-                    let first = user_events.remove(0);
-                    match first {
+                    let first = user_events.remove(0).into_destruct();
+                    match first.event {
                         UserEvent::Created { name, rent_limit } => {
                             Some(User::new(id, name, rent_limit, EventVersion::new(0)))
                         }
-                        _ => Err(Report::new(KernelError::Internal).attach_printable(format!(
-                            "User first event is {first:?} instead of UserEvent::Created"
-                        )))?,
+                        event => {
+                            return Err(Report::new(KernelError::Internal).attach_printable(
+                                format!(
+                                    "User first event is {event:?} instead of UserEvent::Created"
+                                ),
+                            ))
+                        }
                     }
                 }
             }
@@ -50,7 +54,7 @@ pub trait GetUserService<Connection: Send>:
             Some(user) => {
                 let mut user = user;
                 for event in user_events {
-                    match event {
+                    match event.into_destruct().event {
                         UserEvent::Created { .. } => {
                             return Err(Report::new(KernelError::Internal).attach_printable(
                                 format!(
@@ -71,7 +75,8 @@ pub trait GetUserService<Connection: Send>:
                     }
                 }
                 // TODO: Modify User entity in other worker
-                Ok(Some(user.try_into()?))
+                let user_dto: UserDto = user.try_into()?;
+                Ok(Some(user_dto))
             }
         }
     }

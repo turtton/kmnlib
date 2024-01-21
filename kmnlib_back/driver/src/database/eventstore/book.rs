@@ -1,10 +1,10 @@
-use error_stack::{FutureExt, Report, ResultExt};
+use error_stack::{Report, ResultExt};
 use eventstore::Client;
 
 use kernel::interface::command::{BookCommand, BookCommandHandler, BOOK_STREAM_NAME};
-use kernel::interface::event::{BookEvent, EventInfo, UserEvent};
+use kernel::interface::event::{BookEvent, EventInfo};
 use kernel::interface::query::BookEventQuery;
-use kernel::prelude::entity::{Book, BookId, EventVersion, User};
+use kernel::prelude::entity::{Book, BookId, EventVersion};
 use kernel::KernelError;
 
 use crate::database::eventstore::{append_event, read_stream};

@@ -1,8 +1,9 @@
+use crate::database::Transaction;
 use crate::entity::{User, UserId};
 use crate::KernelError;
 
 #[async_trait::async_trait]
-pub trait UserModifier<Connection>: 'static + Sync + Send {
+pub trait UserModifier<Connection: Transaction>: 'static + Sync + Send {
     async fn create(
         &self,
         con: &mut Connection,
@@ -20,7 +21,7 @@ pub trait UserModifier<Connection>: 'static + Sync + Send {
     ) -> error_stack::Result<(), KernelError>;
 }
 
-pub trait DependOnUserModifier<Connection>: 'static + Sync + Send {
+pub trait DependOnUserModifier<Connection: Transaction>: 'static + Sync + Send {
     type UserModifier: UserModifier<Connection>;
     fn user_modifier(&self) -> &Self::UserModifier;
 }

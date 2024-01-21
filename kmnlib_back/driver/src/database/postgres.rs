@@ -1,8 +1,11 @@
+use std::ops::{Deref, DerefMut};
+
 use error_stack::Report;
 use sqlx::pool::PoolConnection;
+use sqlx::postgres::any::AnyConnectionBackend;
 use sqlx::{Error, Pool, Postgres};
 
-use kernel::interface::database::QueryDatabaseConnection;
+use kernel::interface::database::{QueryDatabaseConnection, Transaction};
 use kernel::KernelError;
 
 use crate::env;
@@ -28,11 +31,38 @@ impl PostgresDatabase {
     }
 }
 
+pub struct PostgresConnection(PoolConnection<Postgres>);
+
 #[async_trait::async_trait]
-impl QueryDatabaseConnection<PoolConnection<Postgres>> for PostgresDatabase {
-    async fn transact(&self) -> error_stack::Result<PoolConnection<Postgres>, KernelError> {
+impl Transaction for PostgresConnection {
+    async fn commit(&mut self) -> error_stack::Result<(), KernelError> {
+        self.0.commit().await.convert_error()
+    }
+
+    async fn roll_back(&mut self) -> error_stack::Result<(), KernelError> {
+        self.0.rollback().await.convert_error()
+    }
+}
+
+impl Deref for PostgresConnection {
+    type Target = PoolConnection<Postgres>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for PostgresConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+#[async_trait::async_trait]
+impl QueryDatabaseConnection<PostgresConnection> for PostgresDatabase {
+    async fn transact(&self) -> error_stack::Result<PostgresConnection, KernelError> {
         let con = self.pool.acquire().await.convert_error()?;
-        Ok(con)
+        Ok(PostgresConnection(con))
     }
 }
 

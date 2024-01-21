@@ -1,9 +1,10 @@
+use crate::database::Transaction;
 use crate::entity::{BookId, EventVersion, Rent, UserId};
 use crate::event::{EventInfo, RentEvent};
 use crate::KernelError;
 
 #[async_trait::async_trait]
-pub trait RentQuery<Connection>: Sync + Send + 'static {
+pub trait RentQuery<Connection: Transaction>: Sync + Send + 'static {
     async fn find_by_id(
         &self,
         con: &mut Connection,
@@ -23,7 +24,7 @@ pub trait RentQuery<Connection>: Sync + Send + 'static {
     ) -> error_stack::Result<Vec<Rent>, KernelError>;
 }
 
-pub trait DependOnRentQuery<Connection>: Sync + Send + 'static {
+pub trait DependOnRentQuery<Connection: Transaction>: Sync + Send + 'static {
     type RentQuery: RentQuery<Connection>;
     fn rent_query(&self) -> &Self::RentQuery;
 }

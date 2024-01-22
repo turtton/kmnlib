@@ -59,7 +59,7 @@ impl BookCommandHandler<PostgresConnection> for PostgresBookRepository {
         con: &mut PostgresConnection,
         command: BookCommand,
     ) -> error_stack::Result<(), KernelError> {
-        PgBookInternal::command_handle(con, command).await
+        PgBookInternal::handle_command(con, command).await
     }
 }
 
@@ -189,7 +189,7 @@ impl PgBookInternal {
         Ok(())
     }
 
-    async fn command_handle(
+    async fn handle_command(
         con: &mut PgConnection,
         command: BookCommand,
     ) -> error_stack::Result<(), KernelError> {

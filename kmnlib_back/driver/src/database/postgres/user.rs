@@ -58,7 +58,7 @@ impl UserCommandHandler<PostgresConnection> for PostgresUserRepository {
         con: &mut PostgresConnection,
         command: UserCommand,
     ) -> error_stack::Result<(), KernelError> {
-        PgUserInternal::command_handle(con, command).await
+        PgUserInternal::handle_command(con, command).await
     }
 }
 
@@ -182,7 +182,7 @@ impl PgUserInternal {
         Ok(())
     }
 
-    async fn command_handle(
+    async fn handle_command(
         con: &mut PgConnection,
         command: UserCommand,
     ) -> error_stack::Result<(), KernelError> {

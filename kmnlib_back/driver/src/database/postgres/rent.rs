@@ -1,12 +1,14 @@
-use kernel::interface::command::{RentCommand, RentCommandHandler};
-use kernel::interface::event::{EventInfo, RentEvent};
-use sqlx::{types, PgConnection};
+use error_stack::Report;
+use sqlx::PgConnection;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
+use kernel::interface::command::{RentCommand, RentCommandHandler};
+use kernel::interface::event::{DestructRentEventRow, EventInfo, RentEvent, RentEventRow};
 use kernel::interface::query::{RentEventQuery, RentQuery};
 use kernel::interface::update::RentModifier;
-use kernel::prelude::entity::{BookId, EventVersion, Rent, UserId};
 use kernel::KernelError;
+use kernel::prelude::entity::{BookId, CreatedAt, EventVersion, Rent, UserId};
 
 use crate::database::postgres::PostgresConnection;
 use crate::error::ConvertError;
@@ -73,36 +75,75 @@ impl RentCommandHandler<PostgresConnection> for PostgresRentRepository {
 
 #[async_trait::async_trait]
 impl RentEventQuery<PostgresConnection> for PostgresRentRepository {
+    async fn get_events_from_book(
+        &self,
+        con: &mut PostgresConnection,
+        book_id: &BookId,
+        since: Option<&EventVersion<Rent>>,
+    ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError> {
+        PgRentInternal::get_events_from_book(con, book_id, since).await
+    }
+
+    async fn get_events_from_user(
+        &self,
+        con: &mut PostgresConnection,
+        user_id: &UserId,
+        since: Option<&EventVersion<Rent>>,
+    ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError> {
+        PgRentInternal::get_events_from_user(con, user_id, since).await
+    }
+
     async fn get_events(
         &self,
         con: &mut PostgresConnection,
+        book_id: &BookId,
+        user_id: &UserId,
         since: Option<&EventVersion<Rent>>,
     ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError> {
-        PgRentInternal::get_events(con, since).await
+        PgRentInternal::get_events(con, book_id, user_id, since).await
     }
 }
 
 #[derive(sqlx::FromRow)]
 struct RentRow {
+    version: i64,
     book_id: Uuid,
     user_id: Uuid,
 }
 
 impl From<RentRow> for Rent {
     fn from(value: RentRow) -> Self {
-        Rent::new(BookId::new(value.book_id), UserId::new(value.user_id))
+        Rent::new(
+            EventVersion::new(value.version),
+            BookId::new(value.book_id),
+            UserId::new(value.user_id),
+        )
     }
 }
 
 #[derive(sqlx::FromRow)]
-struct RentEventRow {
-    id: i64,
-    event: types::Json<RentEvent>,
+struct RentEventRowColumn {
+    version: i64,
+    event_name: String,
+    book_id: Uuid,
+    user_id: Uuid,
+    created_at: OffsetDateTime,
 }
 
-impl From<RentEventRow> for EventInfo<RentEvent, Rent> {
-    fn from(value: RentEventRow) -> Self {
-        EventInfo::new(value.event.0, EventVersion::new(value.id))
+impl TryFrom<RentEventRowColumn> for EventInfo<RentEvent, Rent> {
+    type Error = Report<KernelError>;
+    fn try_from(value: RentEventRowColumn) -> Result<Self, Self::Error> {
+        let row = RentEventRow::new(
+            value.event_name,
+            BookId::new(value.book_id),
+            UserId::new(value.user_id),
+        );
+        let event = RentEvent::try_from(row)?;
+        Ok(EventInfo::new(
+            event,
+            EventVersion::new(value.version),
+            CreatedAt::new(value.created_at),
+        ))
     }
 }
 
@@ -118,6 +159,7 @@ impl PgRentInternal {
             // language=postgresql
             r#"
             SELECT
+                version,
                 book_id,
                 user_id
             FROM
@@ -221,30 +263,50 @@ impl PgRentInternal {
         command: RentCommand,
     ) -> error_stack::Result<(), KernelError> {
         let (event_version, event) = RentEvent::convert(command);
+        let DestructRentEventRow {
+            user_id,
+            book_id,
+            event_name,
+        } = RentEventRow::from(event).into_destruct();
         match event_version {
             None => {
                 // language=postgresql
                 sqlx::query(
                     r#"
-                    INSERT INTO rent_events (event)
-                    VALUES ($1)
+                    INSERT INTO rent_events (book_id, user_id, event_name)
+                    VALUES ($1, $2, $3)
                     "#,
                 )
-                .bind(types::Json::from(event))
+                .bind(book_id.as_ref())
+                .bind(user_id.as_ref())
+                .bind(event_name)
                 .execute(con)
                 .await
                 .convert_error()?;
             }
             Some(version) => {
+                let mut version = version;
+                if let EventVersion::Nothing = version {
+                    let event = PgRentInternal::get_events(con, &book_id, &user_id, None).await?;
+                    if !event.is_empty() {
+                        return Err(Report::new(KernelError::Concurrency)
+                            .attach_printable("Event stream already exists"));
+                    } else {
+                        version = EventVersion::new(1);
+                    }
+                }
+
                 // language=postgresql
                 sqlx::query(
                     r#"
-                    INSERT INTO rent_events (id, event)
-                    VALUES ($1, $2)
+                    INSERT INTO rent_events (version, book_id, user_id, event_name)
+                    VALUES ($1, $2, $3, $4)
                     "#,
                 )
                 .bind(version.as_ref())
-                .bind(types::Json::from(event))
+                .bind(book_id.as_ref())
+                .bind(user_id.as_ref())
+                .bind(event_name)
                 .execute(con)
                 .await
                 .convert_error()?;
@@ -252,51 +314,129 @@ impl PgRentInternal {
         }
         Ok(())
     }
-
-    async fn get_events(
+    async fn get_events_from_book(
         con: &mut PgConnection,
+        book_id: &BookId,
         since: Option<&EventVersion<Rent>>,
     ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError> {
         let row = match since {
             None => {
                 // language=postgresql
-                sqlx::query_as::<_, RentEventRow>(
+                sqlx::query_as::<_, RentEventRowColumn>(
                     r#"
-                    SELECT id, event
+                    SELECT version, event_name, book_id, user_id, created_at
                     FROM rent_events
+                    WHERE book_id = $1
                     "#,
                 )
             }
             Some(version) => {
                 // language=postgresql
-                sqlx::query_as::<_, RentEventRow>(
+                sqlx::query_as::<_, RentEventRowColumn>(
                     r#"
-                    SELECT id, event
+                    SELECT version, event_name, book_id, user_id, created_at
                     FROM rent_events
-                    WHERE id > $1
+                    WHERE version > $1 AND book_id = $2
                     "#,
                 )
                 .bind(version.as_ref())
             }
         }
+        .bind(book_id.as_ref())
         .fetch_all(con)
         .await
         .convert_error()?;
 
-        Ok(row.into_iter().map(EventInfo::from).collect())
+        row.into_iter().map(EventInfo::try_from).collect()
+    }
+
+    async fn get_events_from_user(
+        con: &mut PgConnection,
+        user_id: &UserId,
+        since: Option<&EventVersion<Rent>>,
+    ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError> {
+        let row = match since {
+            None => {
+                // language=postgresql
+                sqlx::query_as::<_, RentEventRowColumn>(
+                    r#"
+                    SELECT version, event_name, book_id, user_id, created_at
+                    FROM rent_events
+                    WHERE user_id = $1
+                    "#,
+                )
+            }
+            Some(version) => {
+                // language=postgresql
+                sqlx::query_as::<_, RentEventRowColumn>(
+                    r#"
+                    SELECT version, event_name, book_id, user_id, created_at
+                    FROM rent_events
+                    WHERE version > $1 AND user_id = $2
+                    "#,
+                )
+                .bind(version.as_ref())
+            }
+        }
+        .bind(user_id.as_ref())
+        .fetch_all(con)
+        .await
+        .convert_error()?;
+
+        row.into_iter().map(EventInfo::try_from).collect()
+    }
+
+    async fn get_events(
+        con: &mut PgConnection,
+        book_id: &BookId,
+        user_id: &UserId,
+        since: Option<&EventVersion<Rent>>,
+    ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError> {
+        let row = match since {
+            None => {
+                // language=postgresql
+                sqlx::query_as::<_, RentEventRowColumn>(
+                    r#"
+                    SELECT version, event_name, book_id, user_id, created_at
+                    FROM rent_events
+                    WHERE user_id = $1 AND book_id = $2
+                    "#,
+                )
+            }
+            Some(version) => {
+                // language=postgresql
+                sqlx::query_as::<_, RentEventRowColumn>(
+                    r#"
+                    SELECT version, event_name, book_id, user_id, created_at
+                    FROM rent_events
+                    WHERE version > $1 AND user_id = $2 AND book_id = $3
+                    "#,
+                )
+                .bind(version.as_ref())
+            }
+        }
+        .bind(user_id.as_ref())
+        .bind(book_id.as_ref())
+        .fetch_all(con)
+        .await
+        .convert_error()?;
+
+        row.into_iter().map(EventInfo::try_from).collect()
     }
 }
 
 #[cfg(test)]
 mod test {
+    use kernel::interface::command::{RentCommand, RentCommandHandler};
     use kernel::interface::database::QueryDatabaseConnection;
-    use kernel::interface::query::RentQuery;
+    use kernel::interface::event::RentEvent;
+    use kernel::interface::query::{RentEventQuery, RentQuery};
     use kernel::interface::update::{BookModifier, RentModifier, UserModifier};
+    use kernel::KernelError;
     use kernel::prelude::entity::{
         Book, BookAmount, BookId, BookTitle, EventVersion, Rent, User, UserId, UserName,
         UserRentLimit,
     };
-    use kernel::KernelError;
 
     use crate::database::postgres::{
         PostgresBookRepository, PostgresDatabase, PostgresRentRepository, PostgresUserRepository,
@@ -304,7 +444,7 @@ mod test {
 
     #[test_with::env(POSTGRES_TEST)]
     #[tokio::test]
-    async fn test() -> error_stack::Result<(), KernelError> {
+    async fn test_query() -> error_stack::Result<(), KernelError> {
         let db = PostgresDatabase::new().await?;
         let mut con = db.transact().await?;
         let book_id = BookId::new(uuid::Uuid::new_v4());
@@ -325,7 +465,7 @@ mod test {
         );
         PostgresUserRepository.create(&mut con, user).await?;
 
-        let rent = Rent::new(book_id.clone(), user_id.clone());
+        let rent = Rent::new(EventVersion::new(1), book_id.clone(), user_id.clone());
         PostgresRentRepository.create(&mut con, &rent).await?;
 
         let find = PostgresRentRepository
@@ -341,6 +481,52 @@ mod test {
             .find_by_id(&mut con, &book_id, &user_id)
             .await?;
         assert!(find.is_none());
+        Ok(())
+    }
+
+    #[test_with::env(POSTGRES_TEST)]
+    #[tokio::test]
+    async fn test_event() -> error_stack::Result<(), KernelError> {
+        let db = PostgresDatabase::new().await?;
+        let mut con = db.transact().await?;
+
+        let book_id = BookId::new(uuid::Uuid::new_v4());
+        let user_id = UserId::new(uuid::Uuid::new_v4());
+
+        let rent_command = RentCommand::Rent {
+            book_id: book_id.clone(),
+            user_id: user_id.clone(),
+            expected_version: EventVersion::Nothing,
+        };
+        PostgresRentRepository
+            .handle(&mut con, rent_command.clone())
+            .await?;
+        let rent_event = PostgresRentRepository
+            .get_events(&mut con, &book_id, &user_id, None)
+            .await?;
+        let rent_event = rent_event.first().unwrap();
+        let event_version_first = EventVersion::new(1);
+        assert_eq!(rent_event.version(), &event_version_first);
+        let (_, event) = RentEvent::convert(rent_command);
+        assert_eq!(rent_event.event(), &event);
+
+        let return_command = RentCommand::Return {
+            book_id: book_id.clone(),
+            user_id: user_id.clone(),
+            expected_version: EventVersion::new(2),
+        };
+        PostgresRentRepository
+            .handle(&mut con, return_command.clone())
+            .await?;
+        let rent_event = PostgresRentRepository
+            .get_events(&mut con, &book_id, &user_id, Some(&event_version_first))
+            .await?;
+        let rent_event = rent_event.first().unwrap();
+        assert_eq!(rent_event.version(), &EventVersion::new(2));
+        let (_, event) = RentEvent::convert(return_command);
+        assert_eq!(rent_event.event(), &event);
+
+        // TODO: create rent entity
         Ok(())
     }
 }

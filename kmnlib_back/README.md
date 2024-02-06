@@ -8,78 +8,74 @@ CQRS + Event Sourcing + Partial Clean Architecture + Minimal Cake Pattern + Acto
 
 # Structure
 
-## User
-
-### Snapshot
-
 ```mermaid
 erDiagram
     users {
-        bigserial id "PK"
+        uuid id "PK"
         text name
         int rent_limit
         bigint version
     }
-```
-
-### Event
-
-| name        | data                                                       |
-|-------------|------------------------------------------------------------|
-| UserCreated | `{name: String, rent_limit: i32}`                          |
-| UserUpdated | `{id: i64, name: Option<String>, rent_limit: Option<i32>}` |
-| UserDeleted | `{id: i64}`                                                |
-
-### EventStream
-
-- `User-{id}`
-
-## Book
-
-### Snapshot
-
-```mermaid
-erDiagram
+    user_events {
+        bigint version "PK"
+        uuid user_id "PK"
+        text event_name
+        text name "NULL"
+        int rent_limit "NULL"
+        timestamp created_at
+    }
     books {
-        bigserial id "PK"
+        uuid id "PK"
         text title
         int amount
         bigint version
     }
     book_rents {
-        bigint user_id "PK,FK"
-        bigint book_id "PK,FK"
+        bigint version "PK"
+        uuid user_id "PK,FK"
+        uuid book_id "PK,FK"
     }
-    books ||--o| book_rents: "exists if rented"
+    book_events {
+        bigint version "PK"
+        uuid book_id "PK"
+        text event_name
+        text title "NULL"
+        int amount "NULL"
+        timestamp created_at
+    }
+    rent_events {
+        bigint version "PK"
+        uuid user_id "PK"
+        uuid book_id "PK"
+        text event_name
+        timestamp created_at
+    }
+
+    books ||--|{ book_rents: "exists if rent"
+    books ||--o| book_events: "book event stream"
+    users ||--o| user_events: "user event stream"
+    users ||--|{ book_rents: "exists if be rented"
+    book_rents ||--|| rent_events: "rent event stream"
 ```
 
 ### Event
 
-| name        | data                                                         |
-|-------------|--------------------------------------------------------------|
-| BookCreated | `{title: String, amount: i32}`                               |
-| BookUpdated | `{book_id: i64, title: Option<String>, amount: Option<i32>}` |
-| BookDeleted | `{book_id: i64}`                                             |
+| name        | data                                                        |
+|-------------|-------------------------------------------------------------|
+| UserCreated | `{name: String, rent_limit: i31}`                           |
+| UserUpdated | `{id: UUID, name: Option<String>, rent_limit: Option<i32>}` |
+| UserDeleted | `{id: UUID}`                                                |
 
-| name         | data                                                  |
-|--------------|-------------------------------------------------------|
-| BookRented   | `{user_id: i64, book_id: i64, expected_version: i64}` |
-| BookReturned | `{user_id: i64, book_id: i64, expected_version: i64}` |
+| name        | data                                                          |
+|-------------|---------------------------------------------------------------|
+| BookCreated | `{title: String, amount: i32}`                                |
+| BookUpdated | `{book_id: UUID, title: Option<String>, amount: Option<i32>}` |
+| BookDeleted | `{book_id: UUID}`                                             |
 
-### EventStream
-
-- `Book-{id}`
-- `BookRent`
-
-## StreamVersions
-
-```mermaid
-erDiagram
-    stream_versions {
-        text stream_name "PK"
-        bigint version
-    }
-```
+| name         | data                                                     |
+|--------------|----------------------------------------------------------|
+| BookRented   | `{user_id: UUID, book_id: UUID, expected_version: UUID}` |
+| BookReturned | `{user_id: UUID, book_id: UUID, expected_version: UUID}` |
 
 # DB
 

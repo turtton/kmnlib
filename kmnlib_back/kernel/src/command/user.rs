@@ -1,12 +1,8 @@
-use serde::{Deserialize, Serialize};
-
 use crate::database::Transaction;
 use crate::entity::{UserId, UserName, UserRentLimit};
 use crate::KernelError;
 
-pub static USER_STREAM_NAME: &str = "user-stream";
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum UserCommand {
     Create {
         id: UserId,

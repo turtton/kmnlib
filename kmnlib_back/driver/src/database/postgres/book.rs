@@ -1,13 +1,14 @@
 use error_stack::Report;
-use sqlx::{types, PgConnection};
+use sqlx::PgConnection;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 use kernel::interface::command::{BookCommand, BookCommandHandler};
-use kernel::interface::event::{BookEvent, EventInfo};
+use kernel::interface::event::{BookEvent, BookEventRow, DestructBookEventRow, EventInfo};
 use kernel::interface::query::{BookEventQuery, BookQuery};
 use kernel::interface::update::BookModifier;
-use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
 use kernel::KernelError;
+use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, CreatedAt, EventVersion};
 
 use crate::database::postgres::PostgresConnection;
 use crate::error::ConvertError;
@@ -95,14 +96,28 @@ impl From<BookRow> for Book {
 }
 
 #[derive(sqlx::FromRow)]
-struct BookEventRow {
-    id: i64,
-    event: types::Json<BookEvent>,
+struct BookEventRowColumn {
+    version: i64,
+    event_name: String,
+    title: Option<String>,
+    amount: Option<i32>,
+    created_at: OffsetDateTime,
 }
 
-impl From<BookEventRow> for EventInfo<BookEvent, Book> {
-    fn from(value: BookEventRow) -> Self {
-        EventInfo::new(value.event.0, EventVersion::new(value.id))
+impl TryFrom<BookEventRowColumn> for EventInfo<BookEvent, Book> {
+    type Error = Report<KernelError>;
+    fn try_from(value: BookEventRowColumn) -> Result<Self, Self::Error> {
+        let row = BookEventRow::new(
+            value.event_name,
+            value.title.map(BookTitle::new),
+            value.amount.map(BookAmount::new),
+        );
+        let event = BookEvent::try_from(row)?;
+        Ok(EventInfo::new(
+            event,
+            EventVersion::new(value.version),
+            CreatedAt::new(value.created_at),
+        ))
     }
 }
 
@@ -158,12 +173,13 @@ impl PgBookInternal {
         sqlx::query(
             r#"
             UPDATE books
-            SET title = $2, version = $3
+            SET title = $2, amount = $3, version = $4
             WHERE id = $1
             "#,
         )
         .bind(book.id().as_ref())
         .bind(book.title().as_ref())
+        .bind(book.amount().as_ref())
         .bind(book.version().as_ref())
         .execute(con)
         .await
@@ -194,32 +210,53 @@ impl PgBookInternal {
         command: BookCommand,
     ) -> error_stack::Result<(), KernelError> {
         let (book_id, event_version, event) = BookEvent::convert(command);
+        let DestructBookEventRow {
+            event_name,
+            title,
+            amount,
+        } = BookEventRow::from(event).into_destruct();
+        let title_row = title.as_ref().map(AsRef::as_ref);
+        let amount = amount.as_ref().map(AsRef::as_ref);
         match event_version {
             None => {
                 // language=postgresql
                 sqlx::query(
                     r#"
-                    INSERT INTO book_events (book_id, event)
-                    VALUES ($1, $2)
+                    INSERT INTO book_events (book_id, event_name, title, amount)
+                    VALUES ($1, $2, $3, $4)
                     "#,
                 )
                 .bind(book_id.as_ref())
-                .bind(types::Json::from(event))
+                .bind(event_name)
+                .bind(title_row)
+                .bind(amount)
                 .execute(con)
                 .await
                 .convert_error()?;
             }
             Some(version) => {
+                let mut version = version;
+                if let EventVersion::Nothing = version {
+                    let event = PgBookInternal::get_events(con, &book_id, None).await?;
+                    if !event.is_empty() {
+                        return Err(Report::new(KernelError::Concurrency)
+                            .attach_printable("Event stream is already exists"));
+                    } else {
+                        version = EventVersion::new(1);
+                    }
+                }
                 // language=postgresql
                 sqlx::query(
                     r#"
-                    INSERT INTO book_events (id, book_id, event)
-                    VALUES ($1, $2, $3)
+                    INSERT INTO book_events (version, book_id, event_name, title, amount)
+                    VALUES ($1, $2, $3, $4)
                     "#,
                 )
                 .bind(version.as_ref())
                 .bind(book_id.as_ref())
-                .bind(types::Json::from(event))
+                .bind(event_name)
+                .bind(title_row)
+                .bind(amount)
                 .execute(con)
                 .await
                 .convert_error()?;
@@ -236,18 +273,18 @@ impl PgBookInternal {
         let row = match since {
             Some(version) => {
                 // language=postgresql
-                sqlx::query_as::<_, BookEventRow>(
+                sqlx::query_as::<_, BookEventRowColumn>(
                     r#"
-            SELECT id, event FROM book_events where id > $1 AND book_id = $2
+            SELECT version, event_name, title, amount, created_at FROM book_events where version > $1 AND book_id = $2
             "#,
                 )
                 .bind(version.as_ref())
             }
             None => {
                 // language=postgresql
-                sqlx::query_as::<_, BookEventRow>(
+                sqlx::query_as::<_, BookEventRowColumn>(
                     r#"
-            SELECT id, event FROM book_events where book_id = $1
+            SELECT version, event_name, title, amount, created_at FROM book_events where book_id = $1
             "#,
                 )
             }
@@ -257,27 +294,31 @@ impl PgBookInternal {
         .await
         .convert_error()?;
 
-        Ok(row.into_iter().map(Into::into).collect())
+        row.into_iter().map(EventInfo::try_from).collect()
     }
 }
 
 #[cfg(test)]
 mod test {
+    use uuid::Uuid;
+
+    use kernel::interface::command::{BookCommand, BookCommandHandler};
     use kernel::interface::database::QueryDatabaseConnection;
-    use kernel::interface::query::BookQuery;
+    use kernel::interface::event::BookEvent;
+    use kernel::interface::query::{BookEventQuery, BookQuery};
     use kernel::interface::update::BookModifier;
-    use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
     use kernel::KernelError;
+    use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
 
     use crate::database::postgres::book::PostgresBookRepository;
     use crate::database::postgres::PostgresDatabase;
 
     #[test_with::env(POSTGRES_TEST)]
     #[tokio::test]
-    async fn test() -> error_stack::Result<(), KernelError> {
+    async fn test_query() -> error_stack::Result<(), KernelError> {
         let db = PostgresDatabase::new().await?;
         let mut con = db.transact().await?;
-        let id = BookId::new(uuid::Uuid::new_v4());
+        let id = BookId::new(Uuid::new_v4());
 
         let book = Book::new(
             id.clone(),
@@ -304,6 +345,53 @@ mod test {
         let found = PostgresBookRepository.find_by_id(&mut con, &id).await?;
         assert!(found.is_none());
 
+        Ok(())
+    }
+
+    #[test_with::env(POSTGRES_TEST)]
+    #[tokio::test]
+    async fn test_event() -> error_stack::Result<(), KernelError> {
+        let db = PostgresDatabase::new().await?;
+        let mut con = db.transact().await?;
+
+        let id = BookId::new(Uuid::new_v4());
+        let title = BookTitle::new("test_book".to_string());
+        let amount = BookAmount::new(0);
+
+        let create_command = BookCommand::Create {
+            id: id.clone(),
+            title,
+            amount,
+        };
+        PostgresBookRepository
+            .handle(&mut con, create_command.clone())
+            .await?;
+        let create_event = PostgresBookRepository
+            .get_events(&mut con, &id, None)
+            .await?;
+        let create_event = create_event.first().unwrap();
+        let event_version_first = EventVersion::new(1);
+        assert_eq!(create_event.version(), &event_version_first);
+        let (_, _, expected_event) = BookEvent::convert(create_command);
+        assert_eq!(create_event.event(), &expected_event);
+
+        let update_command = BookCommand::Update {
+            id: id.clone(),
+            title: Some(BookTitle::new("test_book2".to_string())),
+            amount: None,
+        };
+        PostgresBookRepository
+            .handle(&mut con, update_command.clone())
+            .await?;
+        let update_event = PostgresBookRepository
+            .get_events(&mut con, &id, Some(&event_version_first))
+            .await?;
+        let update_event = update_event.first().unwrap();
+        assert_eq!(update_event.version(), &EventVersion::new(2));
+        let (_, _, expected_event) = BookEvent::convert(update_command);
+        assert_eq!(update_event.event(), &expected_event);
+
+        // TODO: create book entity
         Ok(())
     }
 }

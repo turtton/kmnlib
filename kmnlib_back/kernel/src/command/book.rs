@@ -1,12 +1,8 @@
-use serde::{Deserialize, Serialize};
-
 use crate::database::Transaction;
 use crate::entity::{BookAmount, BookId, BookTitle};
 use crate::KernelError;
 
-pub static BOOK_STREAM_NAME: &str = "book-stream";
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum BookCommand {
     Create {
         id: BookId,

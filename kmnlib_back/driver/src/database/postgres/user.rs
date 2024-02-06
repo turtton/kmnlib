@@ -1,12 +1,15 @@
+use error_stack::Report;
+use sqlx::PgConnection;
 use sqlx::types::Uuid;
-use sqlx::{types, PgConnection};
+use time::OffsetDateTime;
 
 use kernel::interface::command::{UserCommand, UserCommandHandler};
-use kernel::interface::event::{EventInfo, UserEvent};
+use kernel::interface::event::{DestructUserEventRow, EventInfo, UserEvent, UserEventRow,
+};
 use kernel::interface::query::{UserEventQuery, UserQuery};
 use kernel::interface::update::UserModifier;
-use kernel::prelude::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
 use kernel::KernelError;
+use kernel::prelude::entity::{CreatedAt, EventVersion, User, UserId, UserName, UserRentLimit};
 
 use crate::database::postgres::PostgresConnection;
 use crate::error::ConvertError;
@@ -94,14 +97,28 @@ impl From<UserRow> for User {
 }
 
 #[derive(sqlx::FromRow)]
-struct UserEventRow {
-    id: i64,
-    event: types::Json<UserEvent>,
+struct UserEventRowColumn {
+    version: i64,
+    event_name: String,
+    name: Option<String>,
+    rent_limit: Option<i32>,
+    created_at: OffsetDateTime,
 }
 
-impl From<UserEventRow> for EventInfo<UserEvent, User> {
-    fn from(value: UserEventRow) -> Self {
-        EventInfo::new(value.event.0, EventVersion::new(value.id))
+impl TryFrom<UserEventRowColumn> for EventInfo<UserEvent, User> {
+    type Error = Report<KernelError>;
+    fn try_from(value: UserEventRowColumn) -> Result<Self, Self::Error> {
+        let row = UserEventRow::new(
+            value.event_name,
+            value.name.map(UserName::new),
+            value.rent_limit.map(UserRentLimit::new),
+        );
+        let event = UserEvent::try_from(row)?;
+        Ok(EventInfo::new(
+            event,
+            EventVersion::new(value.version),
+            CreatedAt::new(value.created_at),
+        ))
     }
 }
 
@@ -187,30 +204,47 @@ impl PgUserInternal {
         command: UserCommand,
     ) -> error_stack::Result<(), KernelError> {
         let (user_id, event_version, event) = UserEvent::convert(command);
+        let DestructUserEventRow {
+            event_name,
+            name,
+            rent_limit,
+        } = UserEventRow::from(event).into_destruct();
+        let name = name.as_ref().map(AsRef::as_ref);
+        let rent_limit = rent_limit.as_ref().map(AsRef::as_ref);
         match event_version {
             None => {
                 // language=postgresql
                 sqlx::query(
                     r#"
-                    INSERT INTO user_events (user_id, event) VALUES ($1, $2)
+                    INSERT INTO user_events (user_id, event_name, name, rent_limit) VALUES ($1, $2, $3, $4)
                     "#,
                 )
                 .bind(user_id.as_ref())
-                .bind(types::Json::from(event))
+                .bind(event_name)
+                .bind(name)
+                .bind(rent_limit)
                 .execute(con)
                 .await
                 .convert_error()?;
             }
             Some(version) => {
+                let mut version = version;
+                if let EventVersion::Nothing = version {
+                    let event = PgUserInternal::get_events(con, &user_id, None).await?;
+                    if !event.is_empty() {
+                        return Err(Report::new(KernelError::Concurrency)
+                            .attach_printable("Event stream is already exists"));
+                    } else {
+                        version = EventVersion::new(1);
+                    }
+                }
                 // language=postgresql
                 sqlx::query(
                     r#"
-                    INSERT INTO user_events (id, user_id, event) VALUES ($1, $2, $3)
+                    INSERT INTO user_events (version, user_id, event_name, name, rent_limit) VALUES ($1, $2, $3, $4, $5)
                     "#,
                 )
                 .bind(version.as_ref())
-                .bind(user_id.as_ref())
-                .bind(types::Json::from(event))
                 .execute(con)
                 .await
                 .convert_error()?;
@@ -227,9 +261,9 @@ impl PgUserInternal {
         let row = match since {
             None => {
                 // language=postgresql
-                sqlx::query_as::<_, UserEventRow>(
+                sqlx::query_as::<_, UserEventRowColumn>(
                     r#"
-                    SELECT id, event
+                    SELECT version, event_name, name, rent_limit, created_at
                     FROM user_events
                     WHERE user_id = $1
                     "#,
@@ -237,11 +271,11 @@ impl PgUserInternal {
             }
             Some(version) => {
                 // language=postgresql
-                sqlx::query_as::<_, UserEventRow>(
+                sqlx::query_as::<_, UserEventRowColumn>(
                     r#"
-                    SELECT id, event
+                    SELECT version, event_name, name, rent_limit, created_at
                     FROM user_events
-                    WHERE id > $2 AND user_id = $1
+                    WHERE version > $1 AND user_id = $2
                     "#,
                 )
                 .bind(version.as_ref())
@@ -252,7 +286,7 @@ impl PgUserInternal {
         .await
         .convert_error()?;
 
-        Ok(row.into_iter().map(EventInfo::from).collect())
+        row.into_iter().map(EventInfo::try_from).collect()
     }
 }
 
@@ -261,14 +295,16 @@ mod test {
     use error_stack::ResultExt;
     use uuid::Uuid;
 
+    use kernel::interface::command::{UserCommand, UserCommandHandler};
     use kernel::interface::database::QueryDatabaseConnection;
-    use kernel::interface::query::UserQuery;
+    use kernel::interface::event::UserEvent;
+    use kernel::interface::query::{UserEventQuery, UserQuery};
     use kernel::interface::update::UserModifier;
-    use kernel::prelude::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
     use kernel::KernelError;
+    use kernel::prelude::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
 
-    use crate::database::postgres::user::PostgresUserRepository;
     use crate::database::postgres::PostgresDatabase;
+    use crate::database::postgres::user::PostgresUserRepository;
 
     #[test_with::env(POSTGRES_TEST)]
     #[tokio::test]
@@ -312,6 +348,52 @@ mod test {
             .await?;
         assert!(found.is_none());
 
+        Ok(())
+    }
+
+    #[test_with::env(POSTGRES_TEST)]
+    #[tokio::test]
+    async fn test_event() -> error_stack::Result<(), KernelError> {
+        let db = PostgresDatabase::new().await?;
+        let mut connection = db.transact().await?;
+        let id = UserId::new(Uuid::new_v4());
+        let name = UserName::new("test".to_string());
+        let rent_limit = UserRentLimit::new(1);
+
+        let create_command = UserCommand::Create {
+            id: id.clone(),
+            name,
+            rent_limit,
+        };
+        PostgresUserRepository
+            .handle(&mut connection, create_command.clone())
+            .await?;
+        let create_event = PostgresUserRepository
+            .get_events(&mut connection, &id, None)
+            .await?;
+        let create_event = create_event.first().unwrap();
+        let event_version_first = EventVersion::new(1);
+        assert_eq!(create_event.version(), &event_version_first);
+        let (_, _, expected_event) = UserEvent::convert(create_command);
+        assert_eq!(create_event.event(), &expected_event);
+
+        let update_command = UserCommand::Update {
+            id: id.clone(),
+            name: Some(UserName::new("test2".to_string())),
+            rent_limit: None,
+        };
+        PostgresUserRepository
+            .handle(&mut connection, update_command.clone())
+            .await?;
+        let update_event = PostgresUserRepository
+            .get_events(&mut connection, &id, Some(&event_version_first))
+            .await?;
+        let update_event = update_event.first().unwrap();
+        assert_eq!(update_event.version(), &EventVersion::new(2));
+        let (_, _, expected_event) = UserEvent::convert(update_command);
+        assert_eq!(update_event.event(), &expected_event);
+
+        // TODO: create user entity
         Ok(())
     }
 }

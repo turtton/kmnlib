@@ -1,10 +1,8 @@
 use crate::KernelError;
 use error_stack::{Report, ResultExt};
-use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EventVersion<T> {
     /*
      * Nothing means that there is no event stream

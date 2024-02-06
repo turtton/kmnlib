@@ -1,3 +1,5 @@
-mod event;
+pub use self::{event::*, time::*};
 
-pub use self::event::*;
+mod event;
+mod time;
+

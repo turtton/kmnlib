@@ -5,10 +5,9 @@ mod rent_limit;
 pub use self::{id::*, name::*, rent_limit::*};
 use crate::entity::common::EventVersion;
 use destructure::Destructure;
-use serde::{Deserialize, Serialize};
 use vodca::References;
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Destructure, References)]
+#[derive(Debug, Clone, Eq, PartialEq, Destructure, References)]
 pub struct User {
     id: UserId,
     name: UserName,

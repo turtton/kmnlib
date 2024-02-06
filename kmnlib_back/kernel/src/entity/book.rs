@@ -5,10 +5,9 @@ mod title;
 pub use self::{amount::*, id::*, title::*};
 use crate::entity::common::EventVersion;
 use destructure::Destructure;
-use serde::{Deserialize, Serialize};
 use vodca::References;
 
-#[derive(Debug, Clone, Eq, PartialEq, References, Serialize, Deserialize, Destructure)]
+#[derive(Debug, Clone, Eq, PartialEq, References, Destructure)]
 pub struct Book {
     id: BookId,
     title: BookTitle,

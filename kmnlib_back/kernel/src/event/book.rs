@@ -1,10 +1,16 @@
-use serde::{Deserialize, Serialize};
+use destructure::Destructure;
+use error_stack::Report;
 
 use crate::command::BookCommand;
 use crate::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
+use crate::event::EventRowFieldAttachments;
+use crate::KernelError;
 
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type")]
+const BOOK_CREATED: &str = "book_created";
+const BOOK_UPDATED: &str = "book_updated";
+const BOOK_DELETED: &str = "book_deleted";
+
+#[derive(Debug, Eq, PartialEq)]
 pub enum BookEvent {
     Created {
         title: BookTitle,
@@ -32,6 +38,61 @@ impl BookEvent {
                 let event = Self::Deleted;
                 (id, None, event)
             }
+        }
+    }
+}
+
+#[derive(Debug, Destructure)]
+pub struct BookEventRow {
+    event_name: String,
+    title: Option<BookTitle>,
+    amount: Option<BookAmount>,
+}
+
+impl BookEventRow {
+    pub fn new(event_name: String, title: Option<BookTitle>, amount: Option<BookAmount>) -> Self {
+        Self {
+            event_name,
+            title,
+            amount,
+        }
+    }
+}
+
+impl From<BookEvent> for BookEventRow {
+    fn from(value: BookEvent) -> Self {
+        match value {
+            BookEvent::Created { title, amount } => {
+                Self::new(String::from(BOOK_CREATED), Some(title), Some(amount))
+            }
+            BookEvent::Updated { title, amount } => {
+                Self::new(String::from(BOOK_UPDATED), title, amount)
+            }
+            BookEvent::Deleted => Self::new(String::from(BOOK_DELETED), None, None),
+        }
+    }
+}
+
+impl TryFrom<BookEventRow> for BookEvent {
+    type Error = Report<KernelError>;
+    fn try_from(value: BookEventRow) -> Result<Self, Self::Error> {
+        let event_name = value.event_name;
+        match &*event_name {
+            BOOK_CREATED => {
+                let title = value.title.ok_or_else(|| {
+                    Report::new(KernelError::Internal).attach_field_details(&event_name, "title")
+                })?;
+                let amount = value.amount.ok_or_else(|| {
+                    Report::new(KernelError::Internal).attach_field_details(&event_name, "amount")
+                })?;
+                Ok(Self::Created { title, amount })
+            }
+            BOOK_UPDATED => Ok(Self::Updated {
+                title: value.title,
+                amount: value.amount,
+            }),
+            BOOK_DELETED => Ok(Self::Deleted),
+            _ => Err(Report::new(KernelError::Internal).attach_unknown_event("book", &event_name)),
         }
     }
 }

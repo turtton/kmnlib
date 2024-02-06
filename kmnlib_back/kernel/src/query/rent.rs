@@ -31,9 +31,25 @@ pub trait DependOnRentQuery<Connection: Transaction>: Sync + Send + 'static {
 
 #[async_trait::async_trait]
 pub trait RentEventQuery<Connection: Transaction>: Sync + Send + 'static {
+    async fn get_events_from_book(
+        &self,
+        con: &mut Connection,
+        book_id: &BookId,
+        since: Option<&EventVersion<Rent>>,
+    ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError>;
+
+    async fn get_events_from_user(
+        &self,
+        con: &mut Connection,
+        user_id: &UserId,
+        since: Option<&EventVersion<Rent>>,
+    ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError>;
+
     async fn get_events(
         &self,
         con: &mut Connection,
+        book_id: &BookId,
+        user_id: &UserId,
         since: Option<&EventVersion<Rent>>,
     ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError>;
 }

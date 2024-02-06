@@ -8,10 +8,13 @@ CREATE TABLE IF NOT EXISTS users
 
 CREATE TABLE IF NOT EXISTS user_events
 (
-    id      BIGSERIAL NOT NULL,
-    user_id UUID      NOT NULL,
-    event   JSON      NOT NULL,
-    PRIMARY KEY (id, user_id)
+    version    BIGSERIAL NOT NULL,
+    user_id    UUID      NOT NULL,
+    event_name TEXT      NOT NULL,
+    name       TEXT,
+    rent_limit INT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (version, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS books
@@ -24,29 +27,31 @@ CREATE TABLE IF NOT EXISTS books
 
 CREATE TABLE IF NOT EXISTS book_events
 (
-    id      BIGSERIAL NOT NULL,
-    book_id UUID      NOT NULL,
-    event   JSON      NOT NULL,
-    PRIMARY KEY (id, book_id)
+    version    BIGSERIAL NOT NULL,
+    book_id    UUID      NOT NULL,
+    event_name TEXT      NOT NULL,
+    title      TEXT,
+    amount     INT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (version, book_id)
 );
 
 CREATE TABLE IF NOT EXISTS book_rents
 (
-    user_id UUID NOT NULL,
-    book_id UUID NOT NULL,
-    PRIMARY KEY (user_id, book_id),
-    FOREIGN KEY (user_id) REFERENCES users (id),
-    FOREIGN KEY (book_id) REFERENCES books (id)
+    version BIGSERIAL NOT NULL,
+    book_id UUID      NOT NULL,
+    user_id UUID      NOT NULL,
+    PRIMARY KEY (version, book_id, user_id),
+    FOREIGN KEY (book_id) REFERENCES books (id),
+    FOREIGN KEY (user_id) REFERENCES users (id)
 );
 
 CREATE TABLE IF NOT EXISTS rent_events
 (
-    id    BIGSERIAL NOT NULL PRIMARY KEY,
-    event JSON      NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS stream_versions
-(
-    stream_name TEXT   NOT NULL PRIMARY KEY,
-    version     BIGINT NOT NULL
+    version    BIGSERIAL NOT NULL,
+    book_id    UUID      NOT NULL,
+    user_id    UUID      NOT NULL,
+    event_name TEXT      NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (version,book_id, user_id)
 );

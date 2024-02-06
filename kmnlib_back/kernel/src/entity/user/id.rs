@@ -1,8 +1,7 @@
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use vodca::{AsRefln, Fromln};
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Default, Serialize, Deserialize, Fromln, AsRefln)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Default, Fromln, AsRefln)]
 pub struct UserId(Uuid);
 
 impl UserId {

@@ -18,7 +18,7 @@ pub enum RentCommand {
 }
 
 #[async_trait::async_trait]
-pub trait RentEventHandler<Connection: Transaction> {
+pub trait RentEventHandler<Connection: Transaction>: 'static + Sync + Send {
     async fn handle(
         &self,
         con: &mut Connection,
@@ -26,7 +26,7 @@ pub trait RentEventHandler<Connection: Transaction> {
     ) -> error_stack::Result<(), KernelError>;
 }
 
-pub trait DependOnRentEventHandler<Connection: Transaction> {
+pub trait DependOnRentEventHandler<Connection: Transaction>: 'static + Sync + Send {
     type RentEventHandler: RentEventHandler<Connection>;
     fn rent_event_handler(&self) -> &Self::RentEventHandler;
 }

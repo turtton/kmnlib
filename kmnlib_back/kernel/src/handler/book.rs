@@ -21,7 +21,7 @@ pub enum BookCommand {
 }
 
 #[async_trait::async_trait]
-pub trait BookEventHandler<Connection: Transaction> {
+pub trait BookEventHandler<Connection: Transaction>: 'static + Sync + Send {
     async fn handle(
         &self,
         con: &mut Connection,
@@ -29,7 +29,7 @@ pub trait BookEventHandler<Connection: Transaction> {
     ) -> error_stack::Result<(), KernelError>;
 }
 
-pub trait DependOnBookEventHandler<Connection: Transaction> {
+pub trait DependOnBookEventHandler<Connection: Transaction>: 'static + Sync + Send {
     type BookEventHandler: BookEventHandler<Connection>;
     fn book_event_handler(&self) -> &Self::BookEventHandler;
 }

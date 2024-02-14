@@ -1,3 +1,5 @@
+pub use self::{book::*, user::*};
+
+mod book;
 mod user;
 
-pub use self::user::*;

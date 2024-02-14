@@ -29,7 +29,7 @@ impl<Event, Entity> EventInfo<Event, Entity> {
 }
 
 pub trait Applier<Event, Id>: 'static + Sync + Send {
-    fn apply(&mut self, event: Event, id: Id);
+    fn apply(&mut self, event: Event);
 }
 
 pub(in crate::event) trait EventRowFieldAttachments {

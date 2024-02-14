@@ -3,10 +3,11 @@ use sqlx::PgConnection;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use kernel::interface::command::{RentCommand, RentCommandHandler};
-use kernel::interface::event::{DestructRentEventRow, EventInfo, RentEvent, RentEventRow};
+use kernel::interface::event::{
+    CommandInfo, DestructCommandInfo, DestructRentEventRow, EventInfo, RentEvent, RentEventRow,
+};
 use kernel::interface::query::{RentEventQuery, RentQuery};
-use kernel::interface::update::RentModifier;
+use kernel::interface::update::{RentEventHandler, RentModifier};
 use kernel::prelude::entity::{BookId, CreatedAt, EventVersion, Rent, UserId};
 use kernel::KernelError;
 
@@ -63,11 +64,11 @@ impl RentModifier<PostgresConnection> for PostgresRentRepository {
 }
 
 #[async_trait::async_trait]
-impl RentCommandHandler<PostgresConnection> for PostgresRentRepository {
+impl RentEventHandler<PostgresConnection> for PostgresRentRepository {
     async fn handle(
         &self,
         con: &mut PostgresConnection,
-        command: RentCommand,
+        command: CommandInfo<RentEvent, Rent>,
     ) -> error_stack::Result<(), KernelError> {
         PgRentInternal::handle_command(con, command).await
     }
@@ -260,15 +261,15 @@ impl PgRentInternal {
 
     async fn handle_command(
         con: &mut PgConnection,
-        command: RentCommand,
+        command: CommandInfo<RentEvent, Rent>,
     ) -> error_stack::Result<(), KernelError> {
-        let (event_version, event) = RentEvent::convert(command);
+        let DestructCommandInfo { event, version } = command.into_destruct();
         let DestructRentEventRow {
             user_id,
             book_id,
             event_name,
         } = RentEventRow::from(event).into_destruct();
-        match event_version {
+        match version {
             None => {
                 // language=postgresql
                 sqlx::query(
@@ -427,11 +428,10 @@ impl PgRentInternal {
 
 #[cfg(test)]
 mod test {
-    use kernel::interface::command::{RentCommand, RentCommandHandler};
     use kernel::interface::database::QueryDatabaseConnection;
-    use kernel::interface::event::RentEvent;
+    use kernel::interface::event::{CommandInfo, RentEvent};
     use kernel::interface::query::{RentEventQuery, RentQuery};
-    use kernel::interface::update::{BookModifier, RentModifier, UserModifier};
+    use kernel::interface::update::{BookModifier, RentEventHandler, RentModifier, UserModifier};
     use kernel::prelude::entity::{
         Book, BookAmount, BookId, BookTitle, EventVersion, Rent, User, UserId, UserName,
         UserRentLimit,
@@ -493,11 +493,11 @@ mod test {
         let book_id = BookId::new(uuid::Uuid::new_v4());
         let user_id = UserId::new(uuid::Uuid::new_v4());
 
-        let rent_command = RentCommand::Rent {
+        let rent_event = RentEvent::Rent {
             book_id: book_id.clone(),
             user_id: user_id.clone(),
-            expected_version: EventVersion::Nothing,
         };
+        let rent_command = CommandInfo::new(rent_event, Some(EventVersion::Nothing));
         PostgresRentRepository
             .handle(&mut con, rent_command.clone())
             .await?;
@@ -510,11 +510,11 @@ mod test {
         let (_, event) = RentEvent::convert(rent_command);
         assert_eq!(rent_event.event(), &event);
 
-        let return_command = RentCommand::Return {
+        let return_event = RentEvent::Return {
             book_id: book_id.clone(),
             user_id: user_id.clone(),
-            expected_version: EventVersion::new(2),
         };
+        let return_command = CommandInfo::new(return_event, Some(EventVersion::new(2)));
         PostgresRentRepository
             .handle(&mut con, return_command.clone())
             .await?;

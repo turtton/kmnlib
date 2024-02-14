@@ -1,5 +1,7 @@
+use crate::command::CommandInfo;
 use crate::database::Transaction;
-use crate::entity::{BookAmount, BookId, BookTitle};
+use crate::entity::{Book, BookAmount, BookId, BookTitle};
+use crate::event::BookEvent;
 use crate::KernelError;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -20,15 +22,15 @@ pub enum BookCommand {
 }
 
 #[async_trait::async_trait]
-pub trait BookCommandHandler<Connection: Transaction> {
+pub trait BookEventHandler<Connection: Transaction> {
     async fn handle(
         &self,
         con: &mut Connection,
-        command: BookCommand,
+        event: CommandInfo<BookEvent, Book>,
     ) -> error_stack::Result<(), KernelError>;
 }
 
-pub trait DependOnBookCommandHandler<Connection: Transaction> {
-    type BookCommandHandler: BookCommandHandler<Connection>;
-    fn book_command_handler(&self) -> &Self::BookCommandHandler;
+pub trait DependOnBookEventHandler<Connection: Transaction> {
+    type BookEventHandler: BookEventHandler<Connection>;
+    fn book_event_handler(&self) -> &Self::BookEventHandler;
 }

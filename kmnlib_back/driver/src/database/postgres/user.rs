@@ -3,10 +3,11 @@ use sqlx::types::Uuid;
 use sqlx::PgConnection;
 use time::OffsetDateTime;
 
-use kernel::interface::command::{UserCommand, UserCommandHandler};
-use kernel::interface::event::{DestructUserEventRow, EventInfo, UserEvent, UserEventRow};
+use kernel::interface::event::{
+    CommandInfo, DestructCommandInfo, DestructUserEventRow, EventInfo, UserEvent, UserEventRow,
+};
 use kernel::interface::query::{UserEventQuery, UserQuery};
-use kernel::interface::update::UserModifier;
+use kernel::interface::update::{UserEventHandler, UserModifier};
 use kernel::prelude::entity::{CreatedAt, EventVersion, User, UserId, UserName, UserRentLimit};
 use kernel::KernelError;
 
@@ -54,11 +55,11 @@ impl UserModifier<PostgresConnection> for PostgresUserRepository {
 }
 
 #[async_trait::async_trait]
-impl UserCommandHandler<PostgresConnection> for PostgresUserRepository {
+impl UserEventHandler<PostgresConnection> for PostgresUserRepository {
     async fn handle(
         &self,
         con: &mut PostgresConnection,
-        command: UserCommand,
+        command: CommandInfo<UserEvent, User>,
     ) -> error_stack::Result<(), KernelError> {
         PgUserInternal::handle_command(con, command).await
     }
@@ -99,6 +100,7 @@ impl From<UserRow> for User {
 struct UserEventRowColumn {
     version: i64,
     event_name: String,
+    user_id: Uuid,
     name: Option<String>,
     rent_limit: Option<i32>,
     created_at: OffsetDateTime,
@@ -109,6 +111,7 @@ impl TryFrom<UserEventRowColumn> for EventInfo<UserEvent, User> {
     fn try_from(value: UserEventRowColumn) -> Result<Self, Self::Error> {
         let row = UserEventRow::new(
             value.event_name,
+            UserId::new(value.user_id),
             value.name.map(UserName::new),
             value.rent_limit.map(UserRentLimit::new),
         );
@@ -200,17 +203,18 @@ impl PgUserInternal {
 
     async fn handle_command(
         con: &mut PgConnection,
-        command: UserCommand,
+        command: CommandInfo<UserEvent, User>,
     ) -> error_stack::Result<(), KernelError> {
-        let (user_id, event_version, event) = UserEvent::convert(command);
+        let DestructCommandInfo { event, version } = command.into_destruct();
         let DestructUserEventRow {
             event_name,
+            id,
             name,
             rent_limit,
         } = UserEventRow::from(event).into_destruct();
         let name = name.as_ref().map(AsRef::as_ref);
         let rent_limit = rent_limit.as_ref().map(AsRef::as_ref);
-        match event_version {
+        match version {
             None => {
                 // language=postgresql
                 sqlx::query(
@@ -218,7 +222,7 @@ impl PgUserInternal {
                     INSERT INTO user_events (user_id, event_name, name, rent_limit) VALUES ($1, $2, $3, $4)
                     "#,
                 )
-                .bind(user_id.as_ref())
+                .bind(id.as_ref())
                 .bind(event_name)
                 .bind(name)
                 .bind(rent_limit)
@@ -229,7 +233,7 @@ impl PgUserInternal {
             Some(version) => {
                 let mut version = version;
                 if let EventVersion::Nothing = version {
-                    let event = PgUserInternal::get_events(con, &user_id, None).await?;
+                    let event = PgUserInternal::get_events(con, &id, None).await?;
                     if !event.is_empty() {
                         return Err(Report::new(KernelError::Concurrency)
                             .attach_printable("Event stream is already exists"));
@@ -294,11 +298,10 @@ mod test {
     use error_stack::ResultExt;
     use uuid::Uuid;
 
-    use kernel::interface::command::{UserCommand, UserCommandHandler};
     use kernel::interface::database::QueryDatabaseConnection;
-    use kernel::interface::event::UserEvent;
+    use kernel::interface::event::{CommandInfo, UserEvent};
     use kernel::interface::query::{UserEventQuery, UserQuery};
-    use kernel::interface::update::UserModifier;
+    use kernel::interface::update::{UserEventHandler, UserModifier};
     use kernel::prelude::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
     use kernel::KernelError;
 
@@ -359,11 +362,12 @@ mod test {
         let name = UserName::new("test".to_string());
         let rent_limit = UserRentLimit::new(1);
 
-        let create_command = UserCommand::Create {
+        let create_event = UserEvent::Create {
             id: id.clone(),
             name,
             rent_limit,
         };
+        let create_command = CommandInfo::new(create_event, None);
         PostgresUserRepository
             .handle(&mut connection, create_command.clone())
             .await?;
@@ -376,11 +380,12 @@ mod test {
         let (_, _, expected_event) = UserEvent::convert(create_command);
         assert_eq!(create_event.event(), &expected_event);
 
-        let update_command = UserCommand::Update {
+        let update_event = UserEvent::Update {
             id: id.clone(),
             name: Some(UserName::new("test2".to_string())),
             rent_limit: None,
         };
+        let update_command = CommandInfo::new(update_event, None);
         PostgresUserRepository
             .handle(&mut connection, update_command.clone())
             .await?;

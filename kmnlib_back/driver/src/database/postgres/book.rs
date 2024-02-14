@@ -3,10 +3,11 @@ use sqlx::PgConnection;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use kernel::interface::command::{BookCommand, BookCommandHandler};
-use kernel::interface::event::{BookEvent, BookEventRow, DestructBookEventRow, EventInfo};
+use kernel::interface::event::{
+    BookEvent, BookEventRow, CommandInfo, DestructBookEventRow, DestructCommandInfo, EventInfo,
+};
 use kernel::interface::query::{BookEventQuery, BookQuery};
-use kernel::interface::update::BookModifier;
+use kernel::interface::update::{BookEventHandler, BookModifier};
 use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, CreatedAt, EventVersion};
 use kernel::KernelError;
 
@@ -54,13 +55,13 @@ impl BookModifier<PostgresConnection> for PostgresBookRepository {
 }
 
 #[async_trait::async_trait]
-impl BookCommandHandler<PostgresConnection> for PostgresBookRepository {
+impl BookEventHandler<PostgresConnection> for PostgresBookRepository {
     async fn handle(
         &self,
         con: &mut PostgresConnection,
-        command: BookCommand,
+        event: CommandInfo<BookEvent, Book>,
     ) -> error_stack::Result<(), KernelError> {
-        PgBookInternal::handle_command(con, command).await
+        PgBookInternal::handle_command(con, event).await
     }
 }
 
@@ -99,6 +100,7 @@ impl From<BookRow> for Book {
 struct BookEventRowColumn {
     version: i64,
     event_name: String,
+    book_id: Uuid,
     title: Option<String>,
     amount: Option<i32>,
     created_at: OffsetDateTime,
@@ -109,6 +111,7 @@ impl TryFrom<BookEventRowColumn> for EventInfo<BookEvent, Book> {
     fn try_from(value: BookEventRowColumn) -> Result<Self, Self::Error> {
         let row = BookEventRow::new(
             value.event_name,
+            BookId::new(value.book_id),
             value.title.map(BookTitle::new),
             value.amount.map(BookAmount::new),
         );
@@ -207,17 +210,18 @@ impl PgBookInternal {
 
     async fn handle_command(
         con: &mut PgConnection,
-        command: BookCommand,
+        event: CommandInfo<BookEvent, Book>,
     ) -> error_stack::Result<(), KernelError> {
-        let (book_id, event_version, event) = BookEvent::convert(command);
+        let DestructCommandInfo { event, version } = event.into_destruct();
         let DestructBookEventRow {
             event_name,
+            id,
             title,
             amount,
         } = BookEventRow::from(event).into_destruct();
         let title_row = title.as_ref().map(AsRef::as_ref);
         let amount = amount.as_ref().map(AsRef::as_ref);
-        match event_version {
+        match version {
             None => {
                 // language=postgresql
                 sqlx::query(
@@ -226,7 +230,7 @@ impl PgBookInternal {
                     VALUES ($1, $2, $3, $4)
                     "#,
                 )
-                .bind(book_id.as_ref())
+                .bind(id.as_ref())
                 .bind(event_name)
                 .bind(title_row)
                 .bind(amount)
@@ -237,7 +241,7 @@ impl PgBookInternal {
             Some(version) => {
                 let mut version = version;
                 if let EventVersion::Nothing = version {
-                    let event = PgBookInternal::get_events(con, &book_id, None).await?;
+                    let event = PgBookInternal::get_events(con, &id, None).await?;
                     if !event.is_empty() {
                         return Err(Report::new(KernelError::Concurrency)
                             .attach_printable("Event stream is already exists"));
@@ -253,7 +257,7 @@ impl PgBookInternal {
                     "#,
                 )
                 .bind(version.as_ref())
-                .bind(book_id.as_ref())
+                .bind(id.as_ref())
                 .bind(event_name)
                 .bind(title_row)
                 .bind(amount)
@@ -302,11 +306,10 @@ impl PgBookInternal {
 mod test {
     use uuid::Uuid;
 
-    use kernel::interface::command::{BookCommand, BookCommandHandler};
     use kernel::interface::database::QueryDatabaseConnection;
-    use kernel::interface::event::BookEvent;
+    use kernel::interface::event::{BookEvent, CommandInfo};
     use kernel::interface::query::{BookEventQuery, BookQuery};
-    use kernel::interface::update::BookModifier;
+    use kernel::interface::update::{BookEventHandler, BookModifier};
     use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
     use kernel::KernelError;
 
@@ -358,11 +361,12 @@ mod test {
         let title = BookTitle::new("test_book".to_string());
         let amount = BookAmount::new(0);
 
-        let create_command = BookCommand::Create {
+        let create_event = BookEvent::Create {
             id: id.clone(),
             title,
             amount,
         };
+        let create_command = CommandInfo::new(create_event, None);
         PostgresBookRepository
             .handle(&mut con, create_command.clone())
             .await?;
@@ -375,11 +379,12 @@ mod test {
         let (_, _, expected_event) = BookEvent::convert(create_command);
         assert_eq!(create_event.event(), &expected_event);
 
-        let update_command = BookCommand::Update {
+        let update_event = BookEvent::Update {
             id: id.clone(),
             title: Some(BookTitle::new("test_book2".to_string())),
             amount: None,
         };
+        let update_command = CommandInfo::new(update_event, None);
         PostgresBookRepository
             .handle(&mut con, update_command.clone())
             .await?;

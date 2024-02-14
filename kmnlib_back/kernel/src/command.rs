@@ -1,5 +1,14 @@
-mod book;
-mod rent;
-mod user;
+use crate::entity::EventVersion;
+use destructure::Destructure;
 
-pub use self::{book::*, rent::*, user::*};
+#[derive(Debug, Clone, Eq, PartialEq, Destructure)]
+pub struct CommandInfo<Event, Entity> {
+    event: Event,
+    version: Option<EventVersion<Entity>>,
+}
+
+impl<Event, Entity> CommandInfo<Event, Entity> {
+    pub fn new(event: Event, version: Option<EventVersion<Entity>>) -> Self {
+        Self { event, version }
+    }
+}

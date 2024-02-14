@@ -28,7 +28,7 @@ pub trait GetUserService<Connection: Transaction + Send>:
         let mut user = self.user_query().find_by_id(&mut connection, &id).await?;
 
         let version = user.as_ref().map(|u| u.version());
-        let mut user_events = self
+        let user_events = self
             .user_event_query()
             .get_events(&mut connection, &id, version)
             .await?;

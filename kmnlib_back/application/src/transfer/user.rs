@@ -33,6 +33,17 @@ pub struct GetUserDto {
     pub id: Uuid,
 }
 
-pub struct RemoveUserDto {
+pub struct CreateUserDto {
+    pub name: String,
+    pub rent_limit: i32,
+}
+
+pub struct UpdateUserDto {
+    pub id: Uuid,
+    pub name: Option<String>,
+    pub rent_limit: Option<i32>,
+}
+
+pub struct DeleteUserDto {
     pub id: Uuid,
 }

@@ -7,8 +7,8 @@ use kernel::interface::command::{RentCommand, RentCommandHandler};
 use kernel::interface::event::{DestructRentEventRow, EventInfo, RentEvent, RentEventRow};
 use kernel::interface::query::{RentEventQuery, RentQuery};
 use kernel::interface::update::RentModifier;
-use kernel::KernelError;
 use kernel::prelude::entity::{BookId, CreatedAt, EventVersion, Rent, UserId};
+use kernel::KernelError;
 
 use crate::database::postgres::PostgresConnection;
 use crate::error::ConvertError;
@@ -432,11 +432,11 @@ mod test {
     use kernel::interface::event::RentEvent;
     use kernel::interface::query::{RentEventQuery, RentQuery};
     use kernel::interface::update::{BookModifier, RentModifier, UserModifier};
-    use kernel::KernelError;
     use kernel::prelude::entity::{
         Book, BookAmount, BookId, BookTitle, EventVersion, Rent, User, UserId, UserName,
         UserRentLimit,
     };
+    use kernel::KernelError;
 
     use crate::database::postgres::{
         PostgresBookRepository, PostgresDatabase, PostgresRentRepository, PostgresUserRepository,

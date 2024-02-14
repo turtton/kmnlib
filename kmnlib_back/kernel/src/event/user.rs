@@ -3,7 +3,7 @@ use error_stack::Report;
 
 use crate::command::UserCommand;
 use crate::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
-use crate::event::EventRowFieldAttachments;
+use crate::event::{Applier, DestructEventInfo, EventInfo, EventRowFieldAttachments};
 use crate::KernelError;
 
 const USER_CREATED: &str = "user_created";
@@ -46,6 +46,32 @@ impl UserEvent {
                 let event = Self::Deleted;
                 (id, None, event)
             }
+        }
+    }
+}
+
+impl Applier<EventInfo<UserEvent, User>, UserId> for Option<User> {
+    fn apply(&mut self, event: EventInfo<UserEvent, User>, id: UserId) {
+        let DestructEventInfo { event, version, .. } = event.into_destruct();
+        match (self, event) {
+            (option @ None, UserEvent::Created { name, rent_limit }) => {
+                *option = Some(User::new(id, name, rent_limit, version));
+            }
+            (Some(user), UserEvent::Updated { name, rent_limit }) => {
+                user.substitute(|user| {
+                    if let Some(name) = name {
+                        *user.name = name;
+                    }
+                    if let Some(rent_limit) = rent_limit {
+                        *user.rent_limit = rent_limit;
+                    }
+                    *user.version = version;
+                });
+            }
+            (option, UserEvent::Deleted) => {
+                *option = None;
+            }
+            _ => {}
         }
     }
 }

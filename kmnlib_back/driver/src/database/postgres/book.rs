@@ -7,8 +7,8 @@ use kernel::interface::command::{BookCommand, BookCommandHandler};
 use kernel::interface::event::{BookEvent, BookEventRow, DestructBookEventRow, EventInfo};
 use kernel::interface::query::{BookEventQuery, BookQuery};
 use kernel::interface::update::BookModifier;
-use kernel::KernelError;
 use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, CreatedAt, EventVersion};
+use kernel::KernelError;
 
 use crate::database::postgres::PostgresConnection;
 use crate::error::ConvertError;
@@ -307,8 +307,8 @@ mod test {
     use kernel::interface::event::BookEvent;
     use kernel::interface::query::{BookEventQuery, BookQuery};
     use kernel::interface::update::BookModifier;
-    use kernel::KernelError;
     use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
+    use kernel::KernelError;
 
     use crate::database::postgres::book::PostgresBookRepository;
     use crate::database::postgres::PostgresDatabase;

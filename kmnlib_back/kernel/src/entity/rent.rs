@@ -1,9 +1,9 @@
-use destructure::Destructure;
+use destructure::{Destructure, Mutation};
 use vodca::References;
 
 use crate::entity::{BookId, EventVersion, UserId};
 
-#[derive(Debug, Clone, Eq, PartialEq, References, Destructure)]
+#[derive(Debug, Clone, Eq, PartialEq, References, Destructure, Mutation)]
 pub struct Rent {
     version: EventVersion<Rent>,
     book_id: BookId,

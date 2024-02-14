@@ -28,6 +28,10 @@ impl<Event, Entity> EventInfo<Event, Entity> {
     }
 }
 
+pub trait Applier<Event, Id>: 'static + Sync + Send {
+    fn apply(&mut self, event: Event, id: Id);
+}
+
 pub(in crate::event) trait EventRowFieldAttachments {
     fn attach_field_details(self, event_name: &str, field_name: &str) -> Self;
     fn attach_unknown_event(self, entity_name: &str, event_name: &str) -> Self;

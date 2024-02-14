@@ -3,7 +3,7 @@ use error_stack::Report;
 
 use crate::command::BookCommand;
 use crate::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
-use crate::event::EventRowFieldAttachments;
+use crate::event::{Applier, DestructEventInfo, EventInfo, EventRowFieldAttachments};
 use crate::KernelError;
 
 const BOOK_CREATED: &str = "book_created";
@@ -38,6 +38,30 @@ impl BookEvent {
                 let event = Self::Deleted;
                 (id, None, event)
             }
+        }
+    }
+}
+
+impl Applier<EventInfo<BookEvent, Book>, BookId> for Option<Book> {
+    fn apply(&mut self, event_info: EventInfo<BookEvent, Book>, id: BookId) {
+        let DestructEventInfo { event, version, .. } = event_info.into_destruct();
+        match (self, event) {
+            (option @ None, BookEvent::Created { title, amount }) => {
+                *option = Some(Book::new(BookId::new(id), title, amount, version));
+            }
+            (Some(book), BookEvent::Updated { title, amount }) => book.substitute(|book| {
+                if let Some(title) = title {
+                    *book.title = title;
+                }
+                if let Some(amount) = amount {
+                    *book.amount = amount;
+                }
+                *book.version = version;
+            }),
+            (option, BookEvent::Deleted) => {
+                *option = None;
+            }
+            _ => {}
         }
     }
 }

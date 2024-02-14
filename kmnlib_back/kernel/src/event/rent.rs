@@ -3,7 +3,7 @@ use error_stack::Report;
 
 use crate::command::RentCommand;
 use crate::entity::{BookId, EventVersion, Rent, UserId};
-use crate::event::EventRowFieldAttachments;
+use crate::event::{Applier, DestructEventInfo, EventInfo, EventRowFieldAttachments};
 use crate::KernelError;
 
 const BOOK_RENTED: &str = "book_rented";
@@ -34,6 +34,21 @@ impl RentEvent {
                 let event = Self::Returned { user_id, book_id };
                 (Some(expected_version), event)
             }
+        }
+    }
+}
+
+impl Applier<EventInfo<RentEvent, Rent>, ()> for Option<Rent> {
+    fn apply(&mut self, event: EventInfo<RentEvent, Rent>, _id: ()) {
+        let DestructEventInfo { event, version, .. } = event.into_destruct();
+        match (self, event) {
+            (option @ None, RentEvent::Rented { book_id, user_id }) => {
+                *option = Some(Rent::new(version, book_id, user_id));
+            }
+            (option, RentEvent::Returned { .. }) => {
+                *option = None;
+            }
+            _ => {}
         }
     }
 }

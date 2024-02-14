@@ -1,15 +1,14 @@
 use error_stack::Report;
-use sqlx::PgConnection;
 use sqlx::types::Uuid;
+use sqlx::PgConnection;
 use time::OffsetDateTime;
 
 use kernel::interface::command::{UserCommand, UserCommandHandler};
-use kernel::interface::event::{DestructUserEventRow, EventInfo, UserEvent, UserEventRow,
-};
+use kernel::interface::event::{DestructUserEventRow, EventInfo, UserEvent, UserEventRow};
 use kernel::interface::query::{UserEventQuery, UserQuery};
 use kernel::interface::update::UserModifier;
-use kernel::KernelError;
 use kernel::prelude::entity::{CreatedAt, EventVersion, User, UserId, UserName, UserRentLimit};
+use kernel::KernelError;
 
 use crate::database::postgres::PostgresConnection;
 use crate::error::ConvertError;
@@ -300,11 +299,11 @@ mod test {
     use kernel::interface::event::UserEvent;
     use kernel::interface::query::{UserEventQuery, UserQuery};
     use kernel::interface::update::UserModifier;
-    use kernel::KernelError;
     use kernel::prelude::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
+    use kernel::KernelError;
 
-    use crate::database::postgres::PostgresDatabase;
     use crate::database::postgres::user::PostgresUserRepository;
+    use crate::database::postgres::PostgresDatabase;
 
     #[test_with::env(POSTGRES_TEST)]
     #[tokio::test]

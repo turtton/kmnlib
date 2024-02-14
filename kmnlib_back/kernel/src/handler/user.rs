@@ -1,7 +1,6 @@
-use crate::command::CommandInfo;
 use crate::database::Transaction;
 use crate::entity::{User, UserId, UserName, UserRentLimit};
-use crate::event::UserEvent;
+use crate::event::{CommandInfo, UserEvent};
 use crate::KernelError;
 
 #[derive(Debug, Clone)]

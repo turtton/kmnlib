@@ -1,7 +1,6 @@
-use crate::command::CommandInfo;
 use crate::database::Transaction;
 use crate::entity::{Book, BookAmount, BookId, BookTitle};
-use crate::event::BookEvent;
+use crate::event::{BookEvent, CommandInfo};
 use crate::KernelError;
 
 #[derive(Debug, Clone, Eq, PartialEq)]

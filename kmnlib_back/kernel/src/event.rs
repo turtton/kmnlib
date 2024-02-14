@@ -32,6 +32,18 @@ pub trait Applier<Event, Id>: 'static + Sync + Send {
     fn apply(&mut self, event: Event);
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Destructure)]
+pub struct CommandInfo<Event, Entity> {
+    event: Event,
+    version: Option<EventVersion<Entity>>,
+}
+
+impl<Event, Entity> CommandInfo<Event, Entity> {
+    pub fn new(event: Event, version: Option<EventVersion<Entity>>) -> Self {
+        Self { event, version }
+    }
+}
+
 pub(in crate::event) trait EventRowFieldAttachments {
     fn attach_field_details(self, event_name: &str, field_name: &str) -> Self;
     fn attach_unknown_event(self, entity_name: &str, event_name: &str) -> Self;

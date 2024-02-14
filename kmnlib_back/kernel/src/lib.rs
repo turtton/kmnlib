@@ -1,6 +1,5 @@
 pub use crate::error::*;
 
-mod command;
 mod database;
 mod entity;
 mod error;
@@ -22,7 +21,6 @@ pub mod interface {
         pub use crate::database::*;
     }
     pub mod event {
-        pub use crate::command::*;
         pub use crate::event::*;
     }
     pub mod query {

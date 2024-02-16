@@ -32,7 +32,7 @@ impl UserModifier<PostgresConnection> for PostgresUserRepository {
     async fn create(
         &self,
         con: &mut PostgresConnection,
-        user: User,
+        user: &User,
     ) -> error_stack::Result<(), KernelError> {
         PgUserInternal::create(con, user).await
     }
@@ -40,7 +40,7 @@ impl UserModifier<PostgresConnection> for PostgresUserRepository {
     async fn update(
         &self,
         con: &mut PostgresConnection,
-        user: User,
+        user: &User,
     ) -> error_stack::Result<(), KernelError> {
         PgUserInternal::update(con, user).await
     }
@@ -48,7 +48,7 @@ impl UserModifier<PostgresConnection> for PostgresUserRepository {
     async fn delete(
         &self,
         con: &mut PostgresConnection,
-        user_id: UserId,
+        user_id: &UserId,
     ) -> error_stack::Result<(), KernelError> {
         PgUserInternal::delete(con, user_id).await
     }
@@ -147,7 +147,7 @@ impl PgUserInternal {
         Ok(found)
     }
 
-    async fn create(con: &mut PgConnection, user: User) -> error_stack::Result<(), KernelError> {
+    async fn create(con: &mut PgConnection, user: &User) -> error_stack::Result<(), KernelError> {
         sqlx::query(
             // language=postgresql
             r#"
@@ -165,7 +165,7 @@ impl PgUserInternal {
         Ok(())
     }
 
-    async fn update(con: &mut PgConnection, user: User) -> error_stack::Result<(), KernelError> {
+    async fn update(con: &mut PgConnection, user: &User) -> error_stack::Result<(), KernelError> {
         // language=postgresql
         sqlx::query(
             r#"
@@ -185,7 +185,7 @@ impl PgUserInternal {
 
     async fn delete(
         con: &mut PgConnection,
-        user_id: UserId,
+        user_id: &UserId,
     ) -> error_stack::Result<(), KernelError> {
         // language=postgresql
         sqlx::query(
@@ -324,7 +324,7 @@ mod test {
         );
 
         PostgresUserRepository
-            .create(&mut connection, user.clone())
+            .create(&mut connection, &user)
             .await?;
 
         let found = PostgresUserRepository
@@ -334,7 +334,7 @@ mod test {
 
         let user = user.reconstruct(|u| u.name = UserName::new("test2".to_string()));
         PostgresUserRepository
-            .update(&mut connection, user.clone())
+            .update(&mut connection, &user)
             .await?;
 
         let found = PostgresUserRepository
@@ -342,9 +342,7 @@ mod test {
             .await?;
         assert_eq!(found, Some(user));
 
-        PostgresUserRepository
-            .delete(&mut connection, id.clone())
-            .await?;
+        PostgresUserRepository.delete(&mut connection, &id).await?;
         let found = PostgresUserRepository
             .find_by_id(&mut connection, &id)
             .await?;

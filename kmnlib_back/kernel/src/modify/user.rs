@@ -7,17 +7,17 @@ pub trait UserModifier<Connection: Transaction>: 'static + Sync + Send {
     async fn create(
         &self,
         con: &mut Connection,
-        user: User,
+        user: &User,
     ) -> error_stack::Result<(), KernelError>;
     async fn update(
         &self,
         con: &mut Connection,
-        user: User,
+        user: &User,
     ) -> error_stack::Result<(), KernelError>;
     async fn delete(
         &self,
         con: &mut Connection,
-        user_id: UserId,
+        user_id: &UserId,
     ) -> error_stack::Result<(), KernelError>;
 }
 

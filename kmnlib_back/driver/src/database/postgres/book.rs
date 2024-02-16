@@ -32,7 +32,7 @@ impl BookModifier<PostgresConnection> for PostgresBookRepository {
     async fn create(
         &self,
         con: &mut PostgresConnection,
-        book: Book,
+        book: &Book,
     ) -> error_stack::Result<(), KernelError> {
         PgBookInternal::create(con, book).await
     }
@@ -40,7 +40,7 @@ impl BookModifier<PostgresConnection> for PostgresBookRepository {
     async fn update(
         &self,
         con: &mut PostgresConnection,
-        book: Book,
+        book: &Book,
     ) -> error_stack::Result<(), KernelError> {
         PgBookInternal::update(con, book).await
     }
@@ -48,7 +48,7 @@ impl BookModifier<PostgresConnection> for PostgresBookRepository {
     async fn delete(
         &self,
         con: &mut PostgresConnection,
-        book_id: BookId,
+        book_id: &BookId,
     ) -> error_stack::Result<(), KernelError> {
         PgBookInternal::delete(con, book_id).await
     }
@@ -150,7 +150,7 @@ impl PgBookInternal {
         Ok(found)
     }
 
-    async fn create(con: &mut PgConnection, book: Book) -> error_stack::Result<(), KernelError> {
+    async fn create(con: &mut PgConnection, book: &Book) -> error_stack::Result<(), KernelError> {
         // language=postgresql
         sqlx::query(
             r#"
@@ -171,7 +171,7 @@ impl PgBookInternal {
         Ok(())
     }
 
-    async fn update(con: &mut PgConnection, book: Book) -> error_stack::Result<(), KernelError> {
+    async fn update(con: &mut PgConnection, book: &Book) -> error_stack::Result<(), KernelError> {
         // language=postgresql
         sqlx::query(
             r#"
@@ -192,7 +192,7 @@ impl PgBookInternal {
 
     async fn delete(
         con: &mut PgConnection,
-        book_id: BookId,
+        book_id: &BookId,
     ) -> error_stack::Result<(), KernelError> {
         // language=postgresql
         sqlx::query(
@@ -329,22 +329,18 @@ mod test {
             BookAmount::new(1),
             EventVersion::new(0),
         );
-        PostgresBookRepository
-            .create(&mut con, book.clone())
-            .await?;
+        PostgresBookRepository.create(&mut con, &book).await?;
 
         let found = PostgresBookRepository.find_by_id(&mut con, &id).await?;
         assert_eq!(found, Some(book.clone()));
 
         let book = book.reconstruct(|b| b.title = BookTitle::new("test2".to_string()));
-        PostgresBookRepository
-            .update(&mut con, book.clone())
-            .await?;
+        PostgresBookRepository.update(&mut con, &book).await?;
 
         let found = PostgresBookRepository.find_by_id(&mut con, &id).await?;
         assert_eq!(found, Some(book));
 
-        PostgresBookRepository.delete(&mut con, id.clone()).await?;
+        PostgresBookRepository.delete(&mut con, &id).await?;
         let found = PostgresBookRepository.find_by_id(&mut con, &id).await?;
         assert!(found.is_none());
 

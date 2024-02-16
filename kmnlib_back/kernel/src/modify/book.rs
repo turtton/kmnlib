@@ -7,17 +7,17 @@ pub trait BookModifier<Connection: Transaction>: 'static + Sync + Send {
     async fn create(
         &self,
         con: &mut Connection,
-        book: Book,
+        book: &Book,
     ) -> error_stack::Result<(), KernelError>;
     async fn update(
         &self,
         con: &mut Connection,
-        book: Book,
+        book: &Book,
     ) -> error_stack::Result<(), KernelError>;
     async fn delete(
         &self,
         con: &mut Connection,
-        book_id: BookId,
+        book_id: &BookId,
     ) -> error_stack::Result<(), KernelError>;
 }
 

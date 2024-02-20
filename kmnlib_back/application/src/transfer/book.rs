@@ -1,8 +1,8 @@
 use error_stack::Report;
 use uuid::Uuid;
 
-use kernel::KernelError;
 use kernel::prelude::entity::{Book, DestructBook};
+use kernel::KernelError;
 
 #[derive(Debug, Clone)]
 pub struct BookDto {

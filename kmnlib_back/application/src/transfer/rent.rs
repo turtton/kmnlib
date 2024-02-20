@@ -35,7 +35,7 @@ pub struct GetRentFromUserIdDto {
     pub user_id: Uuid,
 }
 
-pub struct GetRentFromBookIdAndUserIdDto {
+pub struct GetRentFromIdDto {
     pub book_id: Uuid,
     pub user_id: Uuid,
 }

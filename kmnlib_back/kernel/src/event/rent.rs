@@ -29,25 +29,6 @@ impl Applier<EventInfo<RentEvent, Rent>> for Option<Rent> {
     }
 }
 
-impl Applier<EventInfo<RentEvent, Rent>> for Vec<Rent> {
-    fn apply(&mut self, event: EventInfo<RentEvent, Rent>) {
-        let DestructEventInfo { event, version, .. } = event.into_destruct();
-        match event {
-            RentEvent::Rent { book_id, user_id } => {
-                self.push(Rent::new(version, book_id, user_id));
-            }
-            RentEvent::Return { book_id, user_id } => {
-                let target_index = self
-                    .iter()
-                    .position(|rent| rent.book_id() == &book_id && rent.user_id() == &user_id);
-                if let Some(index) = target_index {
-                    self.remove(index);
-                }
-            }
-        }
-    }
-}
-
 #[derive(Debug, Destructure)]
 pub struct RentEventRow {
     event_name: String,

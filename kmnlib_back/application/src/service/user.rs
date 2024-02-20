@@ -7,19 +7,22 @@ use kernel::interface::event::{Applier, CommandInfo, UserEvent};
 use kernel::interface::query::{
     DependOnUserEventQuery, DependOnUserQuery, UserEventQuery, UserQuery,
 };
-use kernel::interface::update::{DependOnUserEventHandler, UserEventHandler};
+use kernel::interface::update::{
+    DependOnUserEventHandler, DependOnUserModifier, UserEventHandler, UserModifier,
+};
 use kernel::prelude::entity::{UserId, UserName, UserRentLimit};
 use kernel::KernelError;
 
 use crate::transfer::{CreateUserDto, DeleteUserDto, GetUserDto, UpdateUserDto, UserDto};
 
 #[async_trait::async_trait]
-pub trait GetUserService<Connection: Transaction + Send>:
+pub trait GetUserService<Connection: Transaction>:
     'static
     + Sync
     + Send
     + DependOnDatabaseConnection<Connection>
     + DependOnUserQuery<Connection>
+    + DependOnUserModifier<Connection>
     + DependOnUserEventQuery<Connection>
 {
     async fn get_user(
@@ -31,6 +34,7 @@ pub trait GetUserService<Connection: Transaction + Send>:
         let id = dto.id;
         let id = UserId::new(id);
         let mut user = self.user_query().find_by_id(&mut connection, &id).await?;
+        let user_exists = user.is_some();
 
         let version = user.as_ref().map(|u| u.version());
         let user_events = self
@@ -42,6 +46,13 @@ pub trait GetUserService<Connection: Transaction + Send>:
             user.apply(event);
         });
 
+        match (user_exists, &user) {
+            (false, Some(user)) => self.user_modifier().create(&mut connection, user).await?,
+            (true, Some(user)) => self.user_modifier().update(&mut connection, user).await?,
+            (true, None) => self.user_modifier().delete(&mut connection, &id).await?,
+            (false, None) => (),
+        }
+
         match user {
             None => Ok(None),
             Some(user) => Ok(Some(UserDto::try_from(user)?)),
@@ -49,15 +60,16 @@ pub trait GetUserService<Connection: Transaction + Send>:
     }
 }
 
-impl<Connection: Transaction + Send, T> GetUserService<Connection> for T where
+impl<Connection: Transaction, T> GetUserService<Connection> for T where
     T: DependOnDatabaseConnection<Connection>
         + DependOnUserQuery<Connection>
+        + DependOnUserModifier<Connection>
         + DependOnUserEventQuery<Connection>
 {
 }
 
 #[async_trait::async_trait]
-pub trait CreateUserService<Connection: Transaction + Send>:
+pub trait CreateUserService<Connection: Transaction>:
     'static
     + Sync
     + Send
@@ -84,13 +96,13 @@ pub trait CreateUserService<Connection: Transaction + Send>:
     }
 }
 
-impl<Connection: Transaction + Send, T> CreateUserService<Connection> for T where
+impl<Connection: Transaction, T> CreateUserService<Connection> for T where
     T: DependOnDatabaseConnection<Connection> + DependOnUserEventHandler<Connection>
 {
 }
 
 #[async_trait::async_trait]
-pub trait UpdateUserService<Connection: Transaction + Send>:
+pub trait UpdateUserService<Connection: Transaction>:
     'static
     + Sync
     + Send
@@ -117,13 +129,13 @@ pub trait UpdateUserService<Connection: Transaction + Send>:
     }
 }
 
-impl<Connection: Transaction + Send, T> UpdateUserService<Connection> for T where
+impl<Connection: Transaction, T> UpdateUserService<Connection> for T where
     T: DependOnDatabaseConnection<Connection> + DependOnUserEventHandler<Connection>
 {
 }
 
 #[async_trait::async_trait]
-pub trait DeleteUserService<Connection: Transaction + Send>:
+pub trait DeleteUserService<Connection: Transaction>:
     'static
     + Sync
     + Send
@@ -145,7 +157,7 @@ pub trait DeleteUserService<Connection: Transaction + Send>:
     }
 }
 
-impl<Connection: Transaction + Send, T> DeleteUserService<Connection> for T where
+impl<Connection: Transaction, T> DeleteUserService<Connection> for T where
     T: DependOnDatabaseConnection<Connection> + DependOnUserEventHandler<Connection>
 {
 }

@@ -16,6 +16,7 @@ uuid = { version = "1.4", features = ["serde", "v4"] }
 time = { version = "0.3.30", features = ["serde"] }
 serde = { version = "1.0.193", features = ["derive"] }
 
+vodca = { git = "https://github.com/turtton/vodca.git", rev = "00331f8f386680b7aff095f534cd7a99c7b1db75" }
 async-trait = "0.1.74"
 
 error-stack = "0.4.1"

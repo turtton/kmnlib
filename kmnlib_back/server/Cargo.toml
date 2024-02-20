@@ -20,6 +20,7 @@ serde_json = "1.0.114"
 
 error-stack = { workspace = true }
 
-application = { path = "../application"}
-driver = { path = "../driver"}
-kernel = { path = "../kernel"}
+vodca = { workspace = true }
+application = { path = "../application" }
+driver = { path = "../driver" }
+kernel = { path = "../kernel" }

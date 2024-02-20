@@ -10,7 +10,7 @@ uuid = { workspace = true }
 time = { workspace = true }
 
 destructure = "0.5.6"
-vodca = { git = "https://github.com/turtton/vodca.git", rev = "00331f8f386680b7aff095f534cd7a99c7b1db75" }
+vodca = { workspace = true }
 strum = { version = "0.26.1", features = ["derive"] }
 
 async-trait = { workspace = true }

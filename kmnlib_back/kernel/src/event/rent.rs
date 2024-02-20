@@ -14,7 +14,7 @@ pub enum RentEvent {
     Return { book_id: BookId, user_id: UserId },
 }
 
-impl Applier<EventInfo<RentEvent, Rent>, ()> for Option<Rent> {
+impl Applier<EventInfo<RentEvent, Rent>> for Option<Rent> {
     fn apply(&mut self, event: EventInfo<RentEvent, Rent>) {
         let DestructEventInfo { event, version, .. } = event.into_destruct();
         match (self, event) {
@@ -29,7 +29,7 @@ impl Applier<EventInfo<RentEvent, Rent>, ()> for Option<Rent> {
     }
 }
 
-impl Applier<EventInfo<RentEvent, Rent>, ()> for Vec<Rent> {
+impl Applier<EventInfo<RentEvent, Rent>> for Vec<Rent> {
     fn apply(&mut self, event: EventInfo<RentEvent, Rent>) {
         let DestructEventInfo { event, version, .. } = event.into_destruct();
         match event {

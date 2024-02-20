@@ -28,7 +28,7 @@ impl<Event, Entity> EventInfo<Event, Entity> {
     }
 }
 
-pub trait Applier<Event, Id>: 'static + Sync + Send {
+pub trait Applier<Event>: 'static + Sync + Send {
     fn apply(&mut self, event: Event);
 }
 

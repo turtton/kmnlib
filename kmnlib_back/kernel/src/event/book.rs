@@ -26,7 +26,7 @@ pub enum BookEvent {
     },
 }
 
-impl Applier<EventInfo<BookEvent, Book>, BookId> for Option<Book> {
+impl Applier<EventInfo<BookEvent, Book>> for Option<Book> {
     fn apply(&mut self, event: EventInfo<BookEvent, Book>) {
         let DestructEventInfo { event, version, .. } = event.into_destruct();
         match (self, event) {

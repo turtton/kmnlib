@@ -6,12 +6,17 @@ use time::OffsetDateTime;
 use kernel::interface::event::{
     CommandInfo, DestructCommandInfo, DestructUserEventRow, EventInfo, UserEvent, UserEventRow,
 };
-use kernel::interface::query::{UserEventQuery, UserQuery};
-use kernel::interface::update::{UserEventHandler, UserModifier};
+use kernel::interface::query::{
+    DependOnUserEventQuery, DependOnUserQuery, UserEventQuery, UserQuery,
+};
+use kernel::interface::update::{
+    DependOnUserEventHandler, DependOnUserModifier, UserEventHandler, UserModifier,
+};
 use kernel::prelude::entity::{CreatedAt, EventVersion, User, UserId, UserName, UserRentLimit};
 use kernel::KernelError;
 
 use crate::database::postgres::PostgresTransaction;
+use crate::database::PostgresDatabase;
 use crate::error::ConvertError;
 
 pub struct PostgresUserRepository;
@@ -25,6 +30,13 @@ impl UserQuery for PostgresUserRepository {
         id: &UserId,
     ) -> error_stack::Result<Option<User>, KernelError> {
         PgUserInternal::find_by_id(con, id).await
+    }
+}
+
+impl DependOnUserQuery for PostgresDatabase {
+    type UserQuery = PostgresUserRepository;
+    fn user_query(&self) -> &Self::UserQuery {
+        &PostgresUserRepository
     }
 }
 
@@ -56,6 +68,13 @@ impl UserModifier for PostgresUserRepository {
     }
 }
 
+impl DependOnUserModifier for PostgresDatabase {
+    type UserModifier = PostgresUserRepository;
+    fn user_modifier(&self) -> &Self::UserModifier {
+        &PostgresUserRepository
+    }
+}
+
 #[async_trait::async_trait]
 impl UserEventHandler for PostgresUserRepository {
     type Transaction = PostgresTransaction;
@@ -65,6 +84,13 @@ impl UserEventHandler for PostgresUserRepository {
         command: CommandInfo<UserEvent, User>,
     ) -> error_stack::Result<(), KernelError> {
         PgUserInternal::handle_command(con, command).await
+    }
+}
+
+impl DependOnUserEventHandler for PostgresDatabase {
+    type UserEventHandler = PostgresUserRepository;
+    fn user_event_handler(&self) -> &Self::UserEventHandler {
+        &PostgresUserRepository
     }
 }
 
@@ -78,6 +104,13 @@ impl UserEventQuery for PostgresUserRepository {
         since: Option<&EventVersion<User>>,
     ) -> error_stack::Result<Vec<EventInfo<UserEvent, User>>, KernelError> {
         PgUserInternal::get_events(con, id, since).await
+    }
+}
+
+impl DependOnUserEventQuery for PostgresDatabase {
+    type UserEventQuery = PostgresUserRepository;
+    fn user_event_query(&self) -> &Self::UserEventQuery {
+        &PostgresUserRepository
     }
 }
 

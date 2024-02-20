@@ -6,12 +6,17 @@ use uuid::Uuid;
 use kernel::interface::event::{
     CommandInfo, DestructCommandInfo, DestructRentEventRow, EventInfo, RentEvent, RentEventRow,
 };
-use kernel::interface::query::{RentEventQuery, RentQuery};
-use kernel::interface::update::{RentEventHandler, RentModifier};
+use kernel::interface::query::{
+    DependOnRentEventQuery, DependOnRentQuery, RentEventQuery, RentQuery,
+};
+use kernel::interface::update::{
+    DependOnRentEventHandler, DependOnRentModifier, RentEventHandler, RentModifier,
+};
 use kernel::prelude::entity::{BookId, CreatedAt, EventVersion, Rent, UserId};
 use kernel::KernelError;
 
 use crate::database::postgres::PostgresTransaction;
+use crate::database::PostgresDatabase;
 use crate::error::ConvertError;
 
 pub struct PostgresRentRepository;
@@ -44,6 +49,13 @@ impl RentQuery for PostgresRentRepository {
     }
 }
 
+impl DependOnRentQuery for PostgresDatabase {
+    type RentQuery = PostgresRentRepository;
+    fn rent_query(&self) -> &Self::RentQuery {
+        &PostgresRentRepository
+    }
+}
+
 #[async_trait::async_trait]
 impl RentModifier for PostgresRentRepository {
     type Transaction = PostgresTransaction;
@@ -65,6 +77,13 @@ impl RentModifier for PostgresRentRepository {
     }
 }
 
+impl DependOnRentModifier for PostgresDatabase {
+    type RentModifier = PostgresRentRepository;
+    fn rent_modifier(&self) -> &Self::RentModifier {
+        &PostgresRentRepository
+    }
+}
+
 #[async_trait::async_trait]
 impl RentEventHandler for PostgresRentRepository {
     type Transaction = PostgresTransaction;
@@ -74,6 +93,13 @@ impl RentEventHandler for PostgresRentRepository {
         command: CommandInfo<RentEvent, Rent>,
     ) -> error_stack::Result<(), KernelError> {
         PgRentInternal::handle_command(con, command).await
+    }
+}
+
+impl DependOnRentEventHandler for PostgresDatabase {
+    type RentEventHandler = PostgresRentRepository;
+    fn rent_event_handler(&self) -> &Self::RentEventHandler {
+        &PostgresRentRepository
     }
 }
 
@@ -106,6 +132,13 @@ impl RentEventQuery for PostgresRentRepository {
         since: Option<&EventVersion<Rent>>,
     ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError> {
         PgRentInternal::get_events(con, book_id, user_id, since).await
+    }
+}
+
+impl DependOnRentEventQuery for PostgresDatabase {
+    type RentEventQuery = PostgresRentRepository;
+    fn rent_event_query(&self) -> &Self::RentEventQuery {
+        &PostgresRentRepository
     }
 }
 

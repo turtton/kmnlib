@@ -6,12 +6,17 @@ use uuid::Uuid;
 use kernel::interface::event::{
     BookEvent, BookEventRow, CommandInfo, DestructBookEventRow, DestructCommandInfo, EventInfo,
 };
-use kernel::interface::query::{BookEventQuery, BookQuery};
-use kernel::interface::update::{BookEventHandler, BookModifier};
+use kernel::interface::query::{
+    BookEventQuery, BookQuery, DependOnBookEventQuery, DependOnBookQuery,
+};
+use kernel::interface::update::{
+    BookEventHandler, BookModifier, DependOnBookEventHandler, DependOnBookModifier,
+};
 use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, CreatedAt, EventVersion};
 use kernel::KernelError;
 
 use crate::database::postgres::PostgresTransaction;
+use crate::database::PostgresDatabase;
 use crate::error::ConvertError;
 
 pub struct PostgresBookRepository;
@@ -25,6 +30,13 @@ impl BookQuery for PostgresBookRepository {
         id: &BookId,
     ) -> error_stack::Result<Option<Book>, KernelError> {
         PgBookInternal::find_by_id(con, id).await
+    }
+}
+
+impl DependOnBookQuery for PostgresDatabase {
+    type BookQuery = PostgresBookRepository;
+    fn book_query(&self) -> &Self::BookQuery {
+        &PostgresBookRepository
     }
 }
 
@@ -56,6 +68,13 @@ impl BookModifier for PostgresBookRepository {
     }
 }
 
+impl DependOnBookModifier for PostgresDatabase {
+    type BookModifier = PostgresBookRepository;
+    fn book_modifier(&self) -> &Self::BookModifier {
+        &PostgresBookRepository
+    }
+}
+
 #[async_trait::async_trait]
 impl BookEventHandler for PostgresBookRepository {
     type Transaction = PostgresTransaction;
@@ -65,6 +84,13 @@ impl BookEventHandler for PostgresBookRepository {
         event: CommandInfo<BookEvent, Book>,
     ) -> error_stack::Result<(), KernelError> {
         PgBookInternal::handle_command(con, event).await
+    }
+}
+
+impl DependOnBookEventHandler for PostgresDatabase {
+    type BookEventHandler = PostgresBookRepository;
+    fn book_event_handler(&self) -> &Self::BookEventHandler {
+        &PostgresBookRepository
     }
 }
 
@@ -78,6 +104,13 @@ impl BookEventQuery for PostgresBookRepository {
         since: Option<&EventVersion<Book>>,
     ) -> error_stack::Result<Vec<EventInfo<BookEvent, Book>>, KernelError> {
         PgBookInternal::get_events(con, id, since).await
+    }
+}
+
+impl DependOnBookEventQuery for PostgresDatabase {
+    type BookEventQuery = PostgresBookRepository;
+    fn book_event_query(&self) -> &Self::BookEventQuery {
+        &PostgresBookRepository
     }
 }
 

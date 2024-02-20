@@ -1,10 +1,9 @@
 use std::ops::{Deref, DerefMut};
 
 use error_stack::Report;
-use sqlx::postgres::any::AnyConnectionBackend;
 use sqlx::{Error, PgConnection, Pool, Postgres};
 
-use kernel::interface::database::{DatabaseConnection, DependOnDatabaseConnection, Transaction};
+use kernel::interface::database::{DatabaseConnection, Transaction};
 use kernel::KernelError;
 
 use crate::env;

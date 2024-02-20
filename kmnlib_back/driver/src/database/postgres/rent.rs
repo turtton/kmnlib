@@ -12,11 +12,12 @@ use kernel::prelude::entity::{BookId, CreatedAt, EventVersion, Rent, UserId};
 use kernel::KernelError;
 
 use crate::database::postgres::PostgresTransaction;
-use crate::database::PostgresDatabase;
 use crate::error::ConvertError;
 
+pub struct PostgresRentRepository;
+
 #[async_trait::async_trait]
-impl RentQuery for PostgresDatabase {
+impl RentQuery for PostgresRentRepository {
     type Transaction = PostgresTransaction;
     async fn find_by_id(
         &self,
@@ -44,7 +45,7 @@ impl RentQuery for PostgresDatabase {
 }
 
 #[async_trait::async_trait]
-impl RentModifier for PostgresDatabase {
+impl RentModifier for PostgresRentRepository {
     type Transaction = PostgresTransaction;
     async fn create(
         &self,
@@ -65,7 +66,7 @@ impl RentModifier for PostgresDatabase {
 }
 
 #[async_trait::async_trait]
-impl RentEventHandler for PostgresDatabase {
+impl RentEventHandler for PostgresRentRepository {
     type Transaction = PostgresTransaction;
     async fn handle(
         &self,
@@ -77,7 +78,7 @@ impl RentEventHandler for PostgresDatabase {
 }
 
 #[async_trait::async_trait]
-impl RentEventQuery for PostgresDatabase {
+impl RentEventQuery for PostgresRentRepository {
     type Transaction = PostgresTransaction;
     async fn get_events_from_book(
         &self,
@@ -431,7 +432,6 @@ impl PgRentInternal {
 
 #[cfg(test)]
 mod test {
-    use crate::database::PostgresDatabase;
     use kernel::interface::database::DatabaseConnection;
     use kernel::interface::event::{CommandInfo, RentEvent};
     use kernel::interface::query::{RentEventQuery, RentQuery};
@@ -441,6 +441,10 @@ mod test {
         UserRentLimit,
     };
     use kernel::KernelError;
+
+    use crate::database::postgres::{
+        PostgresBookRepository, PostgresDatabase, PostgresRentRepository, PostgresUserRepository,
+    };
 
     #[test_with::env(POSTGRES_TEST)]
     #[tokio::test]
@@ -454,7 +458,7 @@ mod test {
             BookAmount::new(1),
             EventVersion::new(0),
         );
-        db.create(&mut con, &book).await?;
+        PostgresBookRepository.create(&mut con, &book).await?;
 
         let user_id = UserId::new(uuid::Uuid::new_v4());
         let user = User::new(
@@ -463,17 +467,23 @@ mod test {
             UserRentLimit::new(1),
             EventVersion::new(0),
         );
-        db.create(&mut con, &user).await?;
+        PostgresUserRepository.create(&mut con, &user).await?;
 
         let rent = Rent::new(EventVersion::new(1), book_id.clone(), user_id.clone());
-        db.create(&mut con, &rent).await?;
+        PostgresRentRepository.create(&mut con, &rent).await?;
 
-        let find = db.find_by_id(&mut con, &book_id, &user_id).await?;
+        let find = PostgresRentRepository
+            .find_by_id(&mut con, &book_id, &user_id)
+            .await?;
         assert_eq!(find, Some(rent.clone()));
 
-        db.delete(&mut con, &book_id, &user_id).await?;
+        PostgresRentRepository
+            .delete(&mut con, &book_id, &user_id)
+            .await?;
 
-        let find = db.find_by_id(&mut con, &book_id, &user_id).await?;
+        let find = PostgresRentRepository
+            .find_by_id(&mut con, &book_id, &user_id)
+            .await?;
         assert!(find.is_none());
         Ok(())
     }
@@ -492,8 +502,12 @@ mod test {
             user_id: user_id.clone(),
         };
         let rent_command = CommandInfo::new(rent_event, Some(EventVersion::Nothing));
-        db.handle(&mut con, rent_command.clone()).await?;
-        let rent_event = db.get_events(&mut con, &book_id, &user_id, None).await?;
+        PostgresRentRepository
+            .handle(&mut con, rent_command.clone())
+            .await?;
+        let rent_event = PostgresRentRepository
+            .get_events(&mut con, &book_id, &user_id, None)
+            .await?;
         let rent_event = rent_event.first().unwrap();
         let event_version_first = EventVersion::new(1);
         assert_eq!(rent_event.version(), &event_version_first);
@@ -505,8 +519,10 @@ mod test {
             user_id: user_id.clone(),
         };
         let return_command = CommandInfo::new(return_event, Some(EventVersion::new(2)));
-        db.handle(&mut con, return_command.clone()).await?;
-        let rent_event = db
+        PostgresRentRepository
+            .handle(&mut con, return_command.clone())
+            .await?;
+        let rent_event = PostgresRentRepository
             .get_events(&mut con, &book_id, &user_id, Some(&event_version_first))
             .await?;
         let rent_event = rent_event.first().unwrap();

@@ -6,17 +6,18 @@ use uuid::Uuid;
 use kernel::interface::event::{
     BookEvent, BookEventRow, CommandInfo, DestructBookEventRow, DestructCommandInfo, EventInfo,
 };
-use kernel::interface::query::{BookEventQuery, BookQuery, DependOnBookQuery};
+use kernel::interface::query::{BookEventQuery, BookQuery};
 use kernel::interface::update::{BookEventHandler, BookModifier};
 use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, CreatedAt, EventVersion};
 use kernel::KernelError;
 
 use crate::database::postgres::PostgresTransaction;
-use crate::database::PostgresDatabase;
 use crate::error::ConvertError;
 
+pub struct PostgresBookRepository;
+
 #[async_trait::async_trait]
-impl BookQuery for PostgresDatabase {
+impl BookQuery for PostgresBookRepository {
     type Transaction = PostgresTransaction;
     async fn find_by_id(
         &self,
@@ -28,7 +29,7 @@ impl BookQuery for PostgresDatabase {
 }
 
 #[async_trait::async_trait]
-impl BookModifier for PostgresDatabase {
+impl BookModifier for PostgresBookRepository {
     type Transaction = PostgresTransaction;
     async fn create(
         &self,
@@ -56,7 +57,7 @@ impl BookModifier for PostgresDatabase {
 }
 
 #[async_trait::async_trait]
-impl BookEventHandler for PostgresDatabase {
+impl BookEventHandler for PostgresBookRepository {
     type Transaction = PostgresTransaction;
     async fn handle(
         &self,
@@ -68,7 +69,7 @@ impl BookEventHandler for PostgresDatabase {
 }
 
 #[async_trait::async_trait]
-impl BookEventQuery for PostgresDatabase {
+impl BookEventQuery for PostgresBookRepository {
     type Transaction = PostgresTransaction;
     async fn get_events(
         &self,
@@ -316,6 +317,7 @@ mod test {
     use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
     use kernel::KernelError;
 
+    use crate::database::postgres::book::PostgresBookRepository;
     use crate::database::postgres::PostgresDatabase;
 
     #[test_with::env(POSTGRES_TEST)]
@@ -331,19 +333,19 @@ mod test {
             BookAmount::new(1),
             EventVersion::new(0),
         );
-        db.create(&mut con, &book).await?;
+        PostgresBookRepository.create(&mut con, &book).await?;
 
-        let found = db.find_by_id(&mut con, &id).await?;
+        let found = PostgresBookRepository.find_by_id(&mut con, &id).await?;
         assert_eq!(found, Some(book.clone()));
 
         let book = book.reconstruct(|b| b.title = BookTitle::new("test2".to_string()));
-        db.update(&mut con, &book).await?;
+        PostgresBookRepository.update(&mut con, &book).await?;
 
-        let found = db.find_by_id(&mut con, &id).await?;
+        let found = PostgresBookRepository.find_by_id(&mut con, &id).await?;
         assert_eq!(found, Some(book));
 
-        db.delete(&mut con, &id).await?;
-        let found = db.find_by_id(&mut con, &id).await?;
+        PostgresBookRepository.delete(&mut con, &id).await?;
+        let found = PostgresBookRepository.find_by_id(&mut con, &id).await?;
         assert!(found.is_none());
 
         Ok(())
@@ -365,8 +367,12 @@ mod test {
             amount,
         };
         let create_command = CommandInfo::new(create_event, None);
-        db.handle(&mut con, create_command.clone()).await?;
-        let create_event = db.get_events(&mut con, &id, None).await?;
+        PostgresBookRepository
+            .handle(&mut con, create_command.clone())
+            .await?;
+        let create_event = PostgresBookRepository
+            .get_events(&mut con, &id, None)
+            .await?;
         let create_event = create_event.first().unwrap();
         let event_version_first = EventVersion::new(1);
         assert_eq!(create_event.version(), &event_version_first);
@@ -379,8 +385,10 @@ mod test {
             amount: None,
         };
         let update_command = CommandInfo::new(update_event, None);
-        db.handle(&mut con, update_command.clone()).await?;
-        let update_event = db
+        PostgresBookRepository
+            .handle(&mut con, update_command.clone())
+            .await?;
+        let update_event = PostgresBookRepository
             .get_events(&mut con, &id, Some(&event_version_first))
             .await?;
         let update_event = update_event.first().unwrap();

@@ -1,4 +1,4 @@
-use crate::database::Transaction;
+use crate::database::{DatabaseConnection, DependOnDatabaseConnection, Transaction};
 use crate::entity::{Book, BookAmount, BookId, BookTitle};
 use crate::event::{BookEvent, CommandInfo};
 use crate::KernelError;
@@ -21,15 +21,18 @@ pub enum BookCommand {
 }
 
 #[async_trait::async_trait]
-pub trait BookEventHandler<Connection: Transaction>: 'static + Sync + Send {
+pub trait BookEventHandler: 'static + Sync + Send {
+    type Transaction: Transaction;
     async fn handle(
         &self,
-        con: &mut Connection,
+        con: &mut Self::Transaction,
         event: CommandInfo<BookEvent, Book>,
     ) -> error_stack::Result<(), KernelError>;
 }
 
-pub trait DependOnBookEventHandler<Connection: Transaction>: 'static + Sync + Send {
-    type BookEventHandler: BookEventHandler<Connection>;
+pub trait DependOnBookEventHandler: 'static + Sync + Send + DependOnDatabaseConnection {
+    type BookEventHandler: BookEventHandler<
+        Transaction = <Self::DatabaseConnection as DatabaseConnection>::Transaction,
+    >;
     fn book_event_handler(&self) -> &Self::BookEventHandler;
 }

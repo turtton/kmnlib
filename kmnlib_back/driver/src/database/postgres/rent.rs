@@ -11,16 +11,17 @@ use kernel::interface::update::{RentEventHandler, RentModifier};
 use kernel::prelude::entity::{BookId, CreatedAt, EventVersion, Rent, UserId};
 use kernel::KernelError;
 
-use crate::database::postgres::PostgresConnection;
+use crate::database::postgres::PostgresTransaction;
 use crate::error::ConvertError;
 
 pub struct PostgresRentRepository;
 
 #[async_trait::async_trait]
-impl RentQuery<PostgresConnection> for PostgresRentRepository {
+impl RentQuery for PostgresRentRepository {
+    type Transaction = PostgresTransaction;
     async fn find_by_id(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         book_id: &BookId,
         user_id: &UserId,
     ) -> error_stack::Result<Option<Rent>, KernelError> {
@@ -28,7 +29,7 @@ impl RentQuery<PostgresConnection> for PostgresRentRepository {
     }
     async fn find_by_book_id(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         book_id: &BookId,
     ) -> error_stack::Result<Vec<Rent>, KernelError> {
         PgRentInternal::find_by_book_id(con, book_id).await
@@ -36,7 +37,7 @@ impl RentQuery<PostgresConnection> for PostgresRentRepository {
 
     async fn find_by_user_id(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         user_id: &UserId,
     ) -> error_stack::Result<Vec<Rent>, KernelError> {
         PgRentInternal::find_by_user_id(con, user_id).await
@@ -44,10 +45,11 @@ impl RentQuery<PostgresConnection> for PostgresRentRepository {
 }
 
 #[async_trait::async_trait]
-impl RentModifier<PostgresConnection> for PostgresRentRepository {
+impl RentModifier for PostgresRentRepository {
+    type Transaction = PostgresTransaction;
     async fn create(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         rent: &Rent,
     ) -> error_stack::Result<(), KernelError> {
         PgRentInternal::create(con, rent).await
@@ -55,7 +57,7 @@ impl RentModifier<PostgresConnection> for PostgresRentRepository {
 
     async fn delete(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         book_id: &BookId,
         user_id: &UserId,
     ) -> error_stack::Result<(), KernelError> {
@@ -64,10 +66,11 @@ impl RentModifier<PostgresConnection> for PostgresRentRepository {
 }
 
 #[async_trait::async_trait]
-impl RentEventHandler<PostgresConnection> for PostgresRentRepository {
+impl RentEventHandler for PostgresRentRepository {
+    type Transaction = PostgresTransaction;
     async fn handle(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         command: CommandInfo<RentEvent, Rent>,
     ) -> error_stack::Result<(), KernelError> {
         PgRentInternal::handle_command(con, command).await
@@ -75,10 +78,11 @@ impl RentEventHandler<PostgresConnection> for PostgresRentRepository {
 }
 
 #[async_trait::async_trait]
-impl RentEventQuery<PostgresConnection> for PostgresRentRepository {
+impl RentEventQuery for PostgresRentRepository {
+    type Transaction = PostgresTransaction;
     async fn get_events_from_book(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         book_id: &BookId,
         since: Option<&EventVersion<Rent>>,
     ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError> {
@@ -87,7 +91,7 @@ impl RentEventQuery<PostgresConnection> for PostgresRentRepository {
 
     async fn get_events_from_user(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         user_id: &UserId,
         since: Option<&EventVersion<Rent>>,
     ) -> error_stack::Result<Vec<EventInfo<RentEvent, Rent>>, KernelError> {
@@ -96,7 +100,7 @@ impl RentEventQuery<PostgresConnection> for PostgresRentRepository {
 
     async fn get_events(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         book_id: &BookId,
         user_id: &UserId,
         since: Option<&EventVersion<Rent>>,
@@ -428,7 +432,7 @@ impl PgRentInternal {
 
 #[cfg(test)]
 mod test {
-    use kernel::interface::database::QueryDatabaseConnection;
+    use kernel::interface::database::DatabaseConnection;
     use kernel::interface::event::{CommandInfo, RentEvent};
     use kernel::interface::query::{RentEventQuery, RentQuery};
     use kernel::interface::update::{BookModifier, RentEventHandler, RentModifier, UserModifier};

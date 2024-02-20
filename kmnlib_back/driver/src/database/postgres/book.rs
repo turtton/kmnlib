@@ -11,16 +11,17 @@ use kernel::interface::update::{BookEventHandler, BookModifier};
 use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, CreatedAt, EventVersion};
 use kernel::KernelError;
 
-use crate::database::postgres::PostgresConnection;
+use crate::database::postgres::PostgresTransaction;
 use crate::error::ConvertError;
 
 pub struct PostgresBookRepository;
 
 #[async_trait::async_trait]
-impl BookQuery<PostgresConnection> for PostgresBookRepository {
+impl BookQuery for PostgresBookRepository {
+    type Transaction = PostgresTransaction;
     async fn find_by_id(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         id: &BookId,
     ) -> error_stack::Result<Option<Book>, KernelError> {
         PgBookInternal::find_by_id(con, id).await
@@ -28,10 +29,11 @@ impl BookQuery<PostgresConnection> for PostgresBookRepository {
 }
 
 #[async_trait::async_trait]
-impl BookModifier<PostgresConnection> for PostgresBookRepository {
+impl BookModifier for PostgresBookRepository {
+    type Transaction = PostgresTransaction;
     async fn create(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         book: &Book,
     ) -> error_stack::Result<(), KernelError> {
         PgBookInternal::create(con, book).await
@@ -39,7 +41,7 @@ impl BookModifier<PostgresConnection> for PostgresBookRepository {
 
     async fn update(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         book: &Book,
     ) -> error_stack::Result<(), KernelError> {
         PgBookInternal::update(con, book).await
@@ -47,7 +49,7 @@ impl BookModifier<PostgresConnection> for PostgresBookRepository {
 
     async fn delete(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         book_id: &BookId,
     ) -> error_stack::Result<(), KernelError> {
         PgBookInternal::delete(con, book_id).await
@@ -55,10 +57,11 @@ impl BookModifier<PostgresConnection> for PostgresBookRepository {
 }
 
 #[async_trait::async_trait]
-impl BookEventHandler<PostgresConnection> for PostgresBookRepository {
+impl BookEventHandler for PostgresBookRepository {
+    type Transaction = PostgresTransaction;
     async fn handle(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         event: CommandInfo<BookEvent, Book>,
     ) -> error_stack::Result<(), KernelError> {
         PgBookInternal::handle_command(con, event).await
@@ -66,10 +69,11 @@ impl BookEventHandler<PostgresConnection> for PostgresBookRepository {
 }
 
 #[async_trait::async_trait]
-impl BookEventQuery<PostgresConnection> for PostgresBookRepository {
+impl BookEventQuery for PostgresBookRepository {
+    type Transaction = PostgresTransaction;
     async fn get_events(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         id: &BookId,
         since: Option<&EventVersion<Book>>,
     ) -> error_stack::Result<Vec<EventInfo<BookEvent, Book>>, KernelError> {
@@ -306,7 +310,7 @@ impl PgBookInternal {
 mod test {
     use uuid::Uuid;
 
-    use kernel::interface::database::QueryDatabaseConnection;
+    use kernel::interface::database::DatabaseConnection;
     use kernel::interface::event::{BookEvent, CommandInfo};
     use kernel::interface::query::{BookEventQuery, BookQuery};
     use kernel::interface::update::{BookEventHandler, BookModifier};

@@ -1,11 +1,10 @@
 use std::ops::{Deref, DerefMut};
 
 use error_stack::Report;
-use sqlx::pool::PoolConnection;
 use sqlx::postgres::any::AnyConnectionBackend;
 use sqlx::{Error, PgConnection, Pool, Postgres};
 
-use kernel::interface::database::{QueryDatabaseConnection, Transaction};
+use kernel::interface::database::{DatabaseConnection, Transaction};
 use kernel::KernelError;
 
 use crate::env;
@@ -31,20 +30,20 @@ impl PostgresDatabase {
     }
 }
 
-pub struct PostgresConnection(PoolConnection<Postgres>);
+pub struct PostgresTransaction(sqlx::Transaction<'static, Postgres>);
 
 #[async_trait::async_trait]
-impl Transaction for PostgresConnection {
-    async fn commit(&mut self) -> error_stack::Result<(), KernelError> {
+impl Transaction for PostgresTransaction {
+    async fn commit(self) -> error_stack::Result<(), KernelError> {
         self.0.commit().await.convert_error()
     }
 
-    async fn roll_back(&mut self) -> error_stack::Result<(), KernelError> {
+    async fn roll_back(self) -> error_stack::Result<(), KernelError> {
         self.0.rollback().await.convert_error()
     }
 }
 
-impl Deref for PostgresConnection {
+impl Deref for PostgresTransaction {
     type Target = PgConnection;
 
     fn deref(&self) -> &Self::Target {
@@ -52,17 +51,18 @@ impl Deref for PostgresConnection {
     }
 }
 
-impl DerefMut for PostgresConnection {
+impl DerefMut for PostgresTransaction {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
 #[async_trait::async_trait]
-impl QueryDatabaseConnection<PostgresConnection> for PostgresDatabase {
-    async fn transact(&self) -> error_stack::Result<PostgresConnection, KernelError> {
-        let con = self.pool.acquire().await.convert_error()?;
-        Ok(PostgresConnection(con))
+impl DatabaseConnection for PostgresDatabase {
+    type Transaction = PostgresTransaction;
+    async fn transact(&self) -> error_stack::Result<PostgresTransaction, KernelError> {
+        let con = self.pool.begin().await.convert_error()?;
+        Ok(PostgresTransaction(con))
     }
 }
 

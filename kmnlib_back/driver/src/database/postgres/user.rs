@@ -11,16 +11,17 @@ use kernel::interface::update::{UserEventHandler, UserModifier};
 use kernel::prelude::entity::{CreatedAt, EventVersion, User, UserId, UserName, UserRentLimit};
 use kernel::KernelError;
 
-use crate::database::postgres::PostgresConnection;
+use crate::database::postgres::PostgresTransaction;
 use crate::error::ConvertError;
 
 pub struct PostgresUserRepository;
 
 #[async_trait::async_trait]
-impl UserQuery<PostgresConnection> for PostgresUserRepository {
+impl UserQuery for PostgresUserRepository {
+    type Transaction = PostgresTransaction;
     async fn find_by_id(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         id: &UserId,
     ) -> error_stack::Result<Option<User>, KernelError> {
         PgUserInternal::find_by_id(con, id).await
@@ -28,10 +29,11 @@ impl UserQuery<PostgresConnection> for PostgresUserRepository {
 }
 
 #[async_trait::async_trait]
-impl UserModifier<PostgresConnection> for PostgresUserRepository {
+impl UserModifier for PostgresUserRepository {
+    type Transaction = PostgresTransaction;
     async fn create(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         user: &User,
     ) -> error_stack::Result<(), KernelError> {
         PgUserInternal::create(con, user).await
@@ -39,7 +41,7 @@ impl UserModifier<PostgresConnection> for PostgresUserRepository {
 
     async fn update(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         user: &User,
     ) -> error_stack::Result<(), KernelError> {
         PgUserInternal::update(con, user).await
@@ -47,7 +49,7 @@ impl UserModifier<PostgresConnection> for PostgresUserRepository {
 
     async fn delete(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         user_id: &UserId,
     ) -> error_stack::Result<(), KernelError> {
         PgUserInternal::delete(con, user_id).await
@@ -55,10 +57,11 @@ impl UserModifier<PostgresConnection> for PostgresUserRepository {
 }
 
 #[async_trait::async_trait]
-impl UserEventHandler<PostgresConnection> for PostgresUserRepository {
+impl UserEventHandler for PostgresUserRepository {
+    type Transaction = PostgresTransaction;
     async fn handle(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         command: CommandInfo<UserEvent, User>,
     ) -> error_stack::Result<(), KernelError> {
         PgUserInternal::handle_command(con, command).await
@@ -66,10 +69,11 @@ impl UserEventHandler<PostgresConnection> for PostgresUserRepository {
 }
 
 #[async_trait::async_trait]
-impl UserEventQuery<PostgresConnection> for PostgresUserRepository {
+impl UserEventQuery for PostgresUserRepository {
+    type Transaction = PostgresTransaction;
     async fn get_events(
         &self,
-        con: &mut PostgresConnection,
+        con: &mut PostgresTransaction,
         id: &UserId,
         since: Option<&EventVersion<User>>,
     ) -> error_stack::Result<Vec<EventInfo<UserEvent, User>>, KernelError> {
@@ -298,7 +302,7 @@ mod test {
     use error_stack::ResultExt;
     use uuid::Uuid;
 
-    use kernel::interface::database::QueryDatabaseConnection;
+    use kernel::interface::database::DatabaseConnection;
     use kernel::interface::event::{CommandInfo, UserEvent};
     use kernel::interface::query::{UserEventQuery, UserQuery};
     use kernel::interface::update::{UserEventHandler, UserModifier};

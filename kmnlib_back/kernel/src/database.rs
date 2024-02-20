@@ -1,18 +1,19 @@
 use crate::KernelError;
 
 #[async_trait::async_trait]
-pub trait QueryDatabaseConnection<Connection: Transaction>: 'static + Sync + Send {
-    async fn transact(&self) -> error_stack::Result<Connection, KernelError>;
+pub trait DatabaseConnection: 'static + Sync + Send {
+    type Transaction: Transaction;
+    async fn transact(&self) -> error_stack::Result<Self::Transaction, KernelError>;
 }
 
-pub trait DependOnDatabaseConnection<Connection: Transaction>: 'static + Sync + Send {
-    type DatabaseConnection: QueryDatabaseConnection<Connection>;
+pub trait DependOnDatabaseConnection: 'static + Sync + Send {
+    type DatabaseConnection: DatabaseConnection;
     fn database_connection(&self) -> &Self::DatabaseConnection;
 }
 
-impl<T, C: Transaction> DependOnDatabaseConnection<C> for T
+impl<T> DependOnDatabaseConnection for T
 where
-    T: QueryDatabaseConnection<C>,
+    T: DatabaseConnection,
 {
     type DatabaseConnection = T;
     fn database_connection(&self) -> &Self::DatabaseConnection {
@@ -22,6 +23,6 @@ where
 
 #[async_trait::async_trait]
 pub trait Transaction: 'static + Sync + Send {
-    async fn commit(&mut self) -> error_stack::Result<(), KernelError>;
-    async fn roll_back(&mut self) -> error_stack::Result<(), KernelError>;
+    async fn commit(self) -> error_stack::Result<(), KernelError>;
+    async fn roll_back(self) -> error_stack::Result<(), KernelError>;
 }

@@ -17,6 +17,7 @@ mod user;
 
 static POSTGRES_URL: &str = "POSTGRES_URL";
 
+#[derive(Debug, Clone)]
 pub struct PostgresDatabase {
     pool: Pool<Postgres>,
 }

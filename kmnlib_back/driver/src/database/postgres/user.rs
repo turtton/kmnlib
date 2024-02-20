@@ -12,12 +12,11 @@ use kernel::prelude::entity::{CreatedAt, EventVersion, User, UserId, UserName, U
 use kernel::KernelError;
 
 use crate::database::postgres::PostgresTransaction;
+use crate::database::PostgresDatabase;
 use crate::error::ConvertError;
 
-pub struct PostgresUserRepository;
-
 #[async_trait::async_trait]
-impl UserQuery for PostgresUserRepository {
+impl UserQuery for PostgresDatabase {
     type Transaction = PostgresTransaction;
     async fn find_by_id(
         &self,
@@ -29,7 +28,7 @@ impl UserQuery for PostgresUserRepository {
 }
 
 #[async_trait::async_trait]
-impl UserModifier for PostgresUserRepository {
+impl UserModifier for PostgresDatabase {
     type Transaction = PostgresTransaction;
     async fn create(
         &self,
@@ -57,7 +56,7 @@ impl UserModifier for PostgresUserRepository {
 }
 
 #[async_trait::async_trait]
-impl UserEventHandler for PostgresUserRepository {
+impl UserEventHandler for PostgresDatabase {
     type Transaction = PostgresTransaction;
     async fn handle(
         &self,
@@ -69,7 +68,7 @@ impl UserEventHandler for PostgresUserRepository {
 }
 
 #[async_trait::async_trait]
-impl UserEventQuery for PostgresUserRepository {
+impl UserEventQuery for PostgresDatabase {
     type Transaction = PostgresTransaction;
     async fn get_events(
         &self,
@@ -309,7 +308,6 @@ mod test {
     use kernel::prelude::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
     use kernel::KernelError;
 
-    use crate::database::postgres::user::PostgresUserRepository;
     use crate::database::postgres::PostgresDatabase;
 
     #[test_with::env(POSTGRES_TEST)]
@@ -327,29 +325,19 @@ mod test {
             EventVersion::new(0),
         );
 
-        PostgresUserRepository
-            .create(&mut connection, &user)
-            .await?;
+        db.create(&mut connection, &user).await?;
 
-        let found = PostgresUserRepository
-            .find_by_id(&mut connection, &id)
-            .await?;
+        let found = db.find_by_id(&mut connection, &id).await?;
         assert_eq!(found, Some(user.clone()));
 
         let user = user.reconstruct(|u| u.name = UserName::new("test2".to_string()));
-        PostgresUserRepository
-            .update(&mut connection, &user)
-            .await?;
+        db.update(&mut connection, &user).await?;
 
-        let found = PostgresUserRepository
-            .find_by_id(&mut connection, &id)
-            .await?;
+        let found = db.find_by_id(&mut connection, &id).await?;
         assert_eq!(found, Some(user));
 
-        PostgresUserRepository.delete(&mut connection, &id).await?;
-        let found = PostgresUserRepository
-            .find_by_id(&mut connection, &id)
-            .await?;
+        db.delete(&mut connection, &id).await?;
+        let found = db.find_by_id(&mut connection, &id).await?;
         assert!(found.is_none());
 
         Ok(())
@@ -370,12 +358,8 @@ mod test {
             rent_limit,
         };
         let create_command = CommandInfo::new(create_event, None);
-        PostgresUserRepository
-            .handle(&mut connection, create_command.clone())
-            .await?;
-        let create_event = PostgresUserRepository
-            .get_events(&mut connection, &id, None)
-            .await?;
+        db.handle(&mut connection, create_command.clone()).await?;
+        let create_event = db.get_events(&mut connection, &id, None).await?;
         let create_event = create_event.first().unwrap();
         let event_version_first = EventVersion::new(1);
         assert_eq!(create_event.version(), &event_version_first);
@@ -388,10 +372,8 @@ mod test {
             rent_limit: None,
         };
         let update_command = CommandInfo::new(update_event, None);
-        PostgresUserRepository
-            .handle(&mut connection, update_command.clone())
-            .await?;
-        let update_event = PostgresUserRepository
+        db.handle(&mut connection, update_command.clone()).await?;
+        let update_event = db
             .get_events(&mut connection, &id, Some(&event_version_first))
             .await?;
         let update_event = update_event.first().unwrap();

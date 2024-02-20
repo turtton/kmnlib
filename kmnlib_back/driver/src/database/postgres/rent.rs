@@ -458,7 +458,7 @@ mod test {
             BookAmount::new(1),
             EventVersion::new(0),
         );
-        PostgresBookRepository.create(&mut con, book).await?;
+        PostgresBookRepository.create(&mut con, &book).await?;
 
         let user_id = UserId::new(uuid::Uuid::new_v4());
         let user = User::new(
@@ -467,7 +467,7 @@ mod test {
             UserRentLimit::new(1),
             EventVersion::new(0),
         );
-        PostgresUserRepository.create(&mut con, user).await?;
+        PostgresUserRepository.create(&mut con, &user).await?;
 
         let rent = Rent::new(EventVersion::new(1), book_id.clone(), user_id.clone());
         PostgresRentRepository.create(&mut con, &rent).await?;

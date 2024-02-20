@@ -2,7 +2,7 @@ use crate::transfer::{
     CreateRentDto, GetRentFromBookIdDto, GetRentFromIdDto, GetRentFromUserIdDto, RentDto,
 };
 use error_stack::Report;
-use kernel::interface::database::{DatabaseConnection, DependOnDatabaseConnection};
+use kernel::interface::database::{DatabaseConnection, Transaction};
 use kernel::interface::event::{Applier, CommandInfo, DestructEventInfo, RentEvent};
 use kernel::interface::query::{
     DependOnRentEventQuery, DependOnRentQuery, RentEventQuery, RentQuery,
@@ -15,13 +15,7 @@ use kernel::KernelError;
 
 #[async_trait::async_trait]
 pub trait GetRentService:
-    'static
-    + Sync
-    + Send
-    + DependOnDatabaseConnection
-    + DependOnRentQuery
-    + DependOnRentEventQuery
-    + DependOnRentModifier
+    'static + Sync + Send + DependOnRentQuery + DependOnRentEventQuery + DependOnRentModifier
 {
     async fn get_rent_from_book(
         &mut self,
@@ -65,6 +59,7 @@ pub trait GetRentService:
                 }
             }
         }
+        connection.commit().await?;
 
         Ok(rents
             .into_iter()
@@ -114,6 +109,7 @@ pub trait GetRentService:
                 }
             }
         }
+        connection.commit().await?;
 
         Ok(rents
             .into_iter()
@@ -155,23 +151,19 @@ pub trait GetRentService:
             }
             (false, None) => (),
         }
+        connection.commit().await?;
 
         Ok(rents.map(RentDto::try_from).transpose()?)
     }
 }
 
 impl<T> GetRentService for T where
-    T: DependOnDatabaseConnection
-        + DependOnRentQuery
-        + DependOnRentEventQuery
-        + DependOnRentModifier
+    T: DependOnRentQuery + DependOnRentEventQuery + DependOnRentModifier
 {
 }
 
 #[async_trait::async_trait]
-pub trait RentService:
-    'static + Sync + Send + DependOnDatabaseConnection + DependOnRentEventHandler
-{
+pub trait RentService: 'static + Sync + Send + DependOnRentEventHandler {
     async fn rent_book(&mut self, dto: CreateRentDto) -> error_stack::Result<(), KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
@@ -186,17 +178,16 @@ pub trait RentService:
         self.rent_event_handler()
             .handle(&mut connection, command)
             .await?;
+        connection.commit().await?;
 
         Ok(())
     }
 }
 
-impl<T> RentService for T where T: DependOnDatabaseConnection + DependOnRentEventHandler {}
+impl<T> RentService for T where T: DependOnRentEventHandler {}
 
 #[async_trait::async_trait]
-pub trait ReturnService:
-    'static + Sync + Send + DependOnDatabaseConnection + DependOnRentEventHandler
-{
+pub trait ReturnService: 'static + Sync + Send + DependOnRentEventHandler {
     async fn return_book(&mut self, dto: CreateRentDto) -> error_stack::Result<(), KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
@@ -213,4 +204,4 @@ pub trait ReturnService:
     }
 }
 
-impl<T> ReturnService for T where T: DependOnDatabaseConnection + DependOnRentEventHandler {}
+impl<T> ReturnService for T where T: DependOnRentEventHandler {}

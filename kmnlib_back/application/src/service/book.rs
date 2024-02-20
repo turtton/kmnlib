@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use kernel::interface::database::{DatabaseConnection, DependOnDatabaseConnection};
+use kernel::interface::database::{DatabaseConnection, Transaction};
 use kernel::interface::event::{Applier, BookEvent, CommandInfo};
 use kernel::interface::query::{
     BookEventQuery, BookQuery, DependOnBookEventQuery, DependOnBookQuery,
@@ -15,36 +15,31 @@ use crate::transfer::{BookDto, DeleteBookDto, GetBookDto, UpdateBookDto};
 
 #[async_trait::async_trait]
 pub trait GetBookService:
-    'static
-    + Sync
-    + Send
-    + DependOnDatabaseConnection
-    + DependOnBookQuery
-    + DependOnBookModifier
-    + DependOnBookEventQuery
+    'static + Sync + Send + DependOnBookQuery + DependOnBookModifier + DependOnBookEventQuery
 {
     async fn get_book(&self, dto: GetBookDto) -> error_stack::Result<Option<BookDto>, KernelError> {
-        let mut connectioin = self.database_connection().transact().await?;
+        let mut connection = self.database_connection().transact().await?;
 
         let id = dto.id;
         let id = BookId::new(id);
-        let mut book = self.book_query().find_by_id(&mut connectioin, &id).await?;
+        let mut book = self.book_query().find_by_id(&mut connection, &id).await?;
         let book_exists = book.is_some();
 
         let version = book.as_ref().map(|b| b.version());
         let book_events = self
             .book_event_query()
-            .get_events(&mut connectioin, &id, version)
+            .get_events(&mut connection, &id, version)
             .await?;
 
         book_events.into_iter().for_each(|event| book.apply(event));
 
         match (book_exists, &book) {
-            (false, Some(book)) => self.book_modifier().create(&mut connectioin, book).await?,
-            (true, Some(book)) => self.book_modifier().update(&mut connectioin, book).await?,
-            (true, None) => self.book_modifier().delete(&mut connectioin, &id).await?,
+            (false, Some(book)) => self.book_modifier().create(&mut connection, book).await?,
+            (true, Some(book)) => self.book_modifier().update(&mut connection, book).await?,
+            (true, None) => self.book_modifier().delete(&mut connection, &id).await?,
             (false, None) => (),
         }
+        connection.commit().await?;
 
         match book {
             None => Ok(None),
@@ -54,17 +49,12 @@ pub trait GetBookService:
 }
 
 impl<T> GetBookService for T where
-    T: DependOnDatabaseConnection
-        + DependOnBookQuery
-        + DependOnBookModifier
-        + DependOnBookEventQuery
+    T: DependOnBookQuery + DependOnBookModifier + DependOnBookEventQuery
 {
 }
 
 #[async_trait::async_trait]
-pub trait CreateBookService:
-    'static + Sync + Send + DependOnDatabaseConnection + DependOnBookEventHandler
-{
+pub trait CreateBookService: 'static + Sync + Send + DependOnBookEventHandler {
     async fn create_book(&self, dto: BookDto) -> error_stack::Result<Uuid, KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
@@ -80,17 +70,16 @@ pub trait CreateBookService:
         self.book_event_handler()
             .handle(&mut connection, command)
             .await?;
+        connection.commit().await?;
 
         Ok(uuid)
     }
 }
 
-impl<T> CreateBookService for T where T: DependOnDatabaseConnection + DependOnBookEventHandler {}
+impl<T> CreateBookService for T where T: DependOnBookEventHandler {}
 
 #[async_trait::async_trait]
-pub trait UpdateBookService:
-    'static + Sync + Send + DependOnDatabaseConnection + DependOnBookEventHandler
-{
+pub trait UpdateBookService: 'static + Sync + Send + DependOnBookEventHandler {
     async fn update_book(&self, dto: UpdateBookDto) -> error_stack::Result<(), KernelError> {
         let mut connection = self.database_connection().transact().await?;
         let id = BookId::new(dto.id);
@@ -103,16 +92,16 @@ pub trait UpdateBookService:
         self.book_event_handler()
             .handle(&mut connection, command)
             .await?;
+        connection.commit().await?;
+
         Ok(())
     }
 }
 
-impl<T> UpdateBookService for T where T: DependOnDatabaseConnection + DependOnBookEventHandler {}
+impl<T> UpdateBookService for T where T: DependOnBookEventHandler {}
 
 #[async_trait::async_trait]
-pub trait DeleteBookService:
-    'static + Sync + Send + DependOnDatabaseConnection + DependOnBookEventHandler
-{
+pub trait DeleteBookService: 'static + Sync + Send + DependOnBookEventHandler {
     async fn delete_book(&self, dto: DeleteBookDto) -> error_stack::Result<(), KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
@@ -123,9 +112,10 @@ pub trait DeleteBookService:
         self.book_event_handler()
             .handle(&mut connection, command)
             .await?;
+        connection.commit().await?;
 
         Ok(())
     }
 }
 
-impl<T> DeleteBookService for T where T: DependOnDatabaseConnection + DependOnBookEventHandler {}
+impl<T> DeleteBookService for T where T: DependOnBookEventHandler {}

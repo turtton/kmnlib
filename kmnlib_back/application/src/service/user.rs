@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use kernel::interface::database::{DatabaseConnection, DependOnDatabaseConnection};
+use kernel::interface::database::{DatabaseConnection, Transaction};
 use kernel::interface::event::{Applier, CommandInfo, UserEvent};
 use kernel::interface::query::{
     DependOnUserEventQuery, DependOnUserQuery, UserEventQuery, UserQuery,
@@ -15,13 +15,7 @@ use crate::transfer::{CreateUserDto, DeleteUserDto, GetUserDto, UpdateUserDto, U
 
 #[async_trait::async_trait]
 pub trait GetUserService:
-    'static
-    + Sync
-    + Send
-    + DependOnDatabaseConnection
-    + DependOnUserQuery
-    + DependOnUserModifier
-    + DependOnUserEventQuery
+    'static + Sync + Send + DependOnUserQuery + DependOnUserModifier + DependOnUserEventQuery
 {
     async fn get_user(
         &mut self,
@@ -50,6 +44,7 @@ pub trait GetUserService:
             (true, None) => self.user_modifier().delete(&mut connection, &id).await?,
             (false, None) => (),
         }
+        connection.commit().await?;
 
         match user {
             None => Ok(None),
@@ -59,17 +54,12 @@ pub trait GetUserService:
 }
 
 impl<T> GetUserService for T where
-    T: DependOnDatabaseConnection
-        + DependOnUserQuery
-        + DependOnUserModifier
-        + DependOnUserEventQuery
+    T: DependOnUserQuery + DependOnUserModifier + DependOnUserEventQuery
 {
 }
 
 #[async_trait::async_trait]
-pub trait CreateUserService:
-    'static + Sync + Send + DependOnDatabaseConnection + DependOnUserEventHandler
-{
+pub trait CreateUserService: 'static + Sync + Send + DependOnUserEventHandler {
     async fn create_user(&mut self, dto: CreateUserDto) -> error_stack::Result<Uuid, KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
@@ -85,17 +75,16 @@ pub trait CreateUserService:
         self.user_event_handler()
             .handle(&mut connection, command)
             .await?;
+        connection.commit().await?;
 
         Ok(uuid)
     }
 }
 
-impl<T> CreateUserService for T where T: DependOnDatabaseConnection + DependOnUserEventHandler {}
+impl<T> CreateUserService for T where T: DependOnUserEventHandler {}
 
 #[async_trait::async_trait]
-pub trait UpdateUserService:
-    'static + Sync + Send + DependOnDatabaseConnection + DependOnUserEventHandler
-{
+pub trait UpdateUserService: 'static + Sync + Send + DependOnUserEventHandler {
     async fn update_user(&mut self, dto: UpdateUserDto) -> error_stack::Result<(), KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
@@ -111,17 +100,16 @@ pub trait UpdateUserService:
         self.user_event_handler()
             .handle(&mut connection, command)
             .await?;
+        connection.commit().await?;
 
         Ok(())
     }
 }
 
-impl<T> UpdateUserService for T where T: DependOnDatabaseConnection + DependOnUserEventHandler {}
+impl<T> UpdateUserService for T where T: DependOnUserEventHandler {}
 
 #[async_trait::async_trait]
-pub trait DeleteUserService:
-    'static + Sync + Send + DependOnDatabaseConnection + DependOnUserEventHandler
-{
+pub trait DeleteUserService: 'static + Sync + Send + DependOnUserEventHandler {
     async fn delete_user(&mut self, dto: DeleteUserDto) -> error_stack::Result<(), KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
@@ -132,9 +120,10 @@ pub trait DeleteUserService:
         self.user_event_handler()
             .handle(&mut connection, command)
             .await?;
+        connection.commit().await?;
 
         Ok(())
     }
 }
 
-impl<T> DeleteUserService for T where T: DependOnDatabaseConnection + DependOnUserEventHandler {}
+impl<T> DeleteUserService for T where T: DependOnUserEventHandler {}

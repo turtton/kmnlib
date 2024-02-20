@@ -4,7 +4,7 @@ use error_stack::Report;
 use sqlx::postgres::any::AnyConnectionBackend;
 use sqlx::{Error, PgConnection, Pool, Postgres};
 
-use kernel::interface::database::{DatabaseConnection, Transaction};
+use kernel::interface::database::{DatabaseConnection, DependOnDatabaseConnection, Transaction};
 use kernel::KernelError;
 
 use crate::env;
@@ -23,7 +23,7 @@ pub struct PostgresDatabase {
 }
 
 impl PostgresDatabase {
-    async fn new() -> error_stack::Result<Self, KernelError> {
+    pub async fn new() -> error_stack::Result<Self, KernelError> {
         let url = env(POSTGRES_URL)?;
         let pool = Pool::connect(&url).await.convert_error()?;
         Ok(Self { pool })

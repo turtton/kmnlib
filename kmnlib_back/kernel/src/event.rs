@@ -38,7 +38,7 @@ pub struct CommandInfo<Event, Entity> {
     version: Option<ExpectedEventVersion<Entity>>,
 }
 
-impl<Event, Entity> CommandInfo<Event, Entity> {
+impl<Event: Clone, Entity: Clone> CommandInfo<Event, Entity> {
     pub fn new(event: Event, version: Option<ExpectedEventVersion<Entity>>) -> Self {
         Self { event, version }
     }

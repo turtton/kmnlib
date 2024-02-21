@@ -549,8 +549,7 @@ mod test {
         let rent_event = rent_event.first().unwrap();
         let event_version_first = EventVersion::new(1);
         assert_eq!(rent_event.version(), &event_version_first);
-        let (_, event) = RentEvent::convert(rent_command);
-        assert_eq!(rent_event.event(), &event);
+        assert_eq!(rent_event.event(), &rent_command.into_destruct().event);
 
         let return_event = RentEvent::Return {
             book_id: book_id.clone(),
@@ -568,8 +567,7 @@ mod test {
             .await?;
         let rent_event = rent_event.first().unwrap();
         assert_eq!(rent_event.version(), &EventVersion::new(2));
-        let (_, event) = RentEvent::convert(return_command);
-        assert_eq!(rent_event.event(), &event);
+        assert_eq!(rent_event.event(), &return_command.into_destruct().event);
 
         // TODO: create rent entity
         Ok(())

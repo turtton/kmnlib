@@ -9,7 +9,7 @@ const BOOK_CREATED: &str = "book_created";
 const BOOK_UPDATED: &str = "book_updated";
 const BOOK_DELETED: &str = "book_deleted";
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum BookEvent {
     Create {
         id: BookId,

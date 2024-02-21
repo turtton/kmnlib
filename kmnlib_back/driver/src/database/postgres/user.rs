@@ -420,8 +420,7 @@ mod test {
         let create_event = create_event.first().unwrap();
         let event_version_first = EventVersion::new(1);
         assert_eq!(create_event.version(), &event_version_first);
-        let (_, _, expected_event) = UserEvent::convert(create_command);
-        assert_eq!(create_event.event(), &expected_event);
+        assert_eq!(create_event.event(), &create_command.into_destruct().event);
 
         let update_event = UserEvent::Update {
             id: id.clone(),
@@ -437,8 +436,7 @@ mod test {
             .await?;
         let update_event = update_event.first().unwrap();
         assert_eq!(update_event.version(), &EventVersion::new(2));
-        let (_, _, expected_event) = UserEvent::convert(update_command);
-        assert_eq!(update_event.event(), &expected_event);
+        assert_eq!(update_event.event(), &update_command.into_destruct().event);
 
         // TODO: create user entity
         Ok(())

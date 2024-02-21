@@ -9,7 +9,7 @@ const USER_CREATED: &str = "user_created";
 const USER_UPDATED: &str = "user_updated";
 const USER_DELETED: &str = "user_deleted";
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum UserEvent {
     Create {
         id: UserId,

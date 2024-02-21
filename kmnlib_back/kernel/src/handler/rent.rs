@@ -1,21 +1,7 @@
 use crate::database::{DatabaseConnection, DependOnDatabaseConnection, Transaction};
-use crate::entity::{BookId, EventVersion, Rent, UserId};
+use crate::entity::Rent;
 use crate::event::{CommandInfo, RentEvent};
 use crate::KernelError;
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum RentCommand {
-    Rent {
-        book_id: BookId,
-        user_id: UserId,
-        expected_version: EventVersion<Rent>,
-    },
-    Return {
-        book_id: BookId,
-        user_id: UserId,
-        expected_version: EventVersion<Rent>,
-    },
-}
 
 #[async_trait::async_trait]
 pub trait RentEventHandler: 'static + Sync + Send {

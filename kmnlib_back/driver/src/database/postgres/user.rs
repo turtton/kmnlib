@@ -82,7 +82,7 @@ impl UserEventHandler for PostgresUserRepository {
         &self,
         con: &mut PostgresTransaction,
         command: CommandInfo<UserEvent, User>,
-    ) -> error_stack::Result<(), KernelError> {
+    ) -> error_stack::Result<UserId, KernelError> {
         PgUserInternal::handle_command(con, command).await
     }
 }
@@ -241,7 +241,7 @@ impl PgUserInternal {
     async fn handle_command(
         con: &mut PgConnection,
         command: CommandInfo<UserEvent, User>,
-    ) -> error_stack::Result<(), KernelError> {
+    ) -> error_stack::Result<UserId, KernelError> {
         let DestructCommandInfo { event, version } = command.into_destruct();
         let DestructUserEventRow {
             event_name,
@@ -259,13 +259,13 @@ impl PgUserInternal {
                     INSERT INTO user_events (user_id, event_name, name, rent_limit) VALUES ($1, $2, $3, $4)
                     "#,
                 )
-                .bind(id.as_ref())
-                .bind(event_name)
-                .bind(name)
-                .bind(rent_limit)
-                .execute(con)
-                .await
-                .convert_error()?;
+                    .bind(id.as_ref())
+                    .bind(event_name)
+                    .bind(name)
+                    .bind(rent_limit)
+                    .execute(con)
+                    .await
+                    .convert_error()?;
             }
             Some(version) => {
                 let mut version = version;
@@ -284,13 +284,17 @@ impl PgUserInternal {
                     INSERT INTO user_events (version, user_id, event_name, name, rent_limit) VALUES ($1, $2, $3, $4, $5)
                     "#,
                 )
-                .bind(version.as_ref())
-                .execute(con)
-                .await
-                .convert_error()?;
+                    .bind(version.as_ref())
+                    .bind(id.as_ref())
+                    .bind(event_name)
+                    .bind(name)
+                    .bind(rent_limit)
+                    .execute(con)
+                    .await
+                    .convert_error()?;
             }
         }
-        Ok(())
+        Ok(id)
     }
 
     async fn get_events(

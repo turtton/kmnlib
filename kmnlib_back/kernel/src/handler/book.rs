@@ -1,24 +1,7 @@
 use crate::database::{DatabaseConnection, DependOnDatabaseConnection, Transaction};
-use crate::entity::{Book, BookAmount, BookId, BookTitle};
+use crate::entity::{Book, BookId};
 use crate::event::{BookEvent, CommandInfo};
 use crate::KernelError;
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum BookCommand {
-    Create {
-        id: BookId,
-        title: BookTitle,
-        amount: BookAmount,
-    },
-    Update {
-        id: BookId,
-        title: Option<BookTitle>,
-        amount: Option<BookAmount>,
-    },
-    Delete {
-        id: BookId,
-    },
-}
 
 #[async_trait::async_trait]
 pub trait BookEventHandler: 'static + Sync + Send {
@@ -27,7 +10,7 @@ pub trait BookEventHandler: 'static + Sync + Send {
         &self,
         con: &mut Self::Transaction,
         event: CommandInfo<BookEvent, Book>,
-    ) -> error_stack::Result<(), KernelError>;
+    ) -> error_stack::Result<BookId, KernelError>;
 }
 
 pub trait DependOnBookEventHandler: 'static + Sync + Send + DependOnDatabaseConnection {

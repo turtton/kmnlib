@@ -82,7 +82,7 @@ impl BookEventHandler for PostgresBookRepository {
         &self,
         con: &mut PostgresTransaction,
         event: CommandInfo<BookEvent, Book>,
-    ) -> error_stack::Result<(), KernelError> {
+    ) -> error_stack::Result<BookId, KernelError> {
         PgBookInternal::handle_command(con, event).await
     }
 }
@@ -248,7 +248,7 @@ impl PgBookInternal {
     async fn handle_command(
         con: &mut PgConnection,
         event: CommandInfo<BookEvent, Book>,
-    ) -> error_stack::Result<(), KernelError> {
+    ) -> error_stack::Result<BookId, KernelError> {
         let DestructCommandInfo { event, version } = event.into_destruct();
         let DestructBookEventRow {
             event_name,
@@ -303,7 +303,7 @@ impl PgBookInternal {
                 .convert_error()?;
             }
         }
-        Ok(())
+        Ok(id)
     }
 
     async fn get_events(
@@ -319,7 +319,7 @@ impl PgBookInternal {
             SELECT version, event_name, title, amount, created_at FROM book_events where version > $1 AND book_id = $2
             "#,
                 )
-                .bind(version.as_ref())
+                    .bind(version.as_ref())
             }
             None => {
                 // language=postgresql
@@ -330,10 +330,10 @@ impl PgBookInternal {
                 )
             }
         }
-        .bind(id.as_ref())
-        .fetch_all(con)
-        .await
-        .convert_error()?;
+            .bind(id.as_ref())
+            .fetch_all(con)
+            .await
+            .convert_error()?;
 
         row.into_iter().map(EventInfo::try_from).collect()
     }

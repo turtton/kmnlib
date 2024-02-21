@@ -1,4 +1,4 @@
-use crate::transfer::{GetRentFromBookIdDto, GetRentFromIdDto, GetRentFromUserIdDto, RentDto};
+use crate::transfer::{GetRentFromBookIdDto, GetRentFromIdDto, GetRentFromUserIdDto};
 use kernel::interface::database::{DatabaseConnection, Transaction};
 use kernel::interface::event::{Applier, CommandInfo, DestructEventInfo, RentEvent};
 use kernel::interface::query::{
@@ -37,7 +37,7 @@ pub trait GetRentService:
     async fn get_rent_from_book(
         &mut self,
         dto: GetRentFromBookIdDto,
-    ) -> error_stack::Result<Vec<RentDto>, KernelError> {
+    ) -> error_stack::Result<Vec<Rent>, KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
         let book_id = BookId::new(dto.book_id);
@@ -78,16 +78,13 @@ pub trait GetRentService:
         }
         connection.commit().await?;
 
-        Ok(rents
-            .into_iter()
-            .map(RentDto::from)
-            .collect::<Vec<RentDto>>())
+        Ok(rents)
     }
 
     async fn get_rent_from_user(
         &mut self,
         dto: GetRentFromUserIdDto,
-    ) -> error_stack::Result<Vec<RentDto>, KernelError> {
+    ) -> error_stack::Result<Vec<Rent>, KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
         let user_id = UserId::new(dto.user_id);
@@ -128,16 +125,13 @@ pub trait GetRentService:
         }
         connection.commit().await?;
 
-        Ok(rents
-            .into_iter()
-            .map(RentDto::from)
-            .collect::<Vec<RentDto>>())
+        Ok(rents)
     }
 
     async fn get_rent_from_id(
         &mut self,
         dto: GetRentFromIdDto,
-    ) -> error_stack::Result<Option<RentDto>, KernelError> {
+    ) -> error_stack::Result<Option<Rent>, KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
         let book_id = BookId::new(dto.book_id);
@@ -170,7 +164,7 @@ pub trait GetRentService:
         }
         connection.commit().await?;
 
-        Ok(rents.map(RentDto::from))
+        Ok(rents)
     }
 }
 

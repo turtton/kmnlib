@@ -9,7 +9,7 @@ use kernel::interface::update::{
 use kernel::prelude::entity::{User, UserId};
 use kernel::KernelError;
 
-use crate::transfer::{GetUserDto, UserDto};
+use crate::transfer::GetUserDto;
 
 #[async_trait::async_trait]
 pub trait HandleUserService: 'static + Sync + Send + DependOnUserEventHandler {
@@ -37,7 +37,7 @@ pub trait GetUserService:
     async fn get_user(
         &mut self,
         dto: GetUserDto,
-    ) -> error_stack::Result<Option<UserDto>, KernelError> {
+    ) -> error_stack::Result<Option<User>, KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
         let id = dto.id;
@@ -63,10 +63,7 @@ pub trait GetUserService:
         }
         connection.commit().await?;
 
-        match user {
-            None => Ok(None),
-            Some(user) => Ok(Some(UserDto::from(user))),
-        }
+        Ok(user)
     }
 }
 

@@ -1,5 +1,3 @@
-use uuid::Uuid;
-
 use kernel::interface::database::{DatabaseConnection, Transaction};
 use kernel::interface::event::{Applier, BookEvent, CommandInfo};
 use kernel::interface::query::{
@@ -8,10 +6,10 @@ use kernel::interface::query::{
 use kernel::interface::update::{
     BookEventHandler, BookModifier, DependOnBookEventHandler, DependOnBookModifier,
 };
-use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle};
+use kernel::prelude::entity::{Book, BookId};
 use kernel::KernelError;
 
-use crate::transfer::{BookDto, GetBookDto};
+use crate::transfer::GetBookDto;
 
 #[async_trait::async_trait]
 pub trait HandleBookService: 'static + Sync + Send + DependOnBookEventHandler {
@@ -38,7 +36,7 @@ impl<T> HandleBookService for T where T: DependOnBookEventHandler {}
 pub trait GetBookService:
     'static + Sync + Send + DependOnBookQuery + DependOnBookModifier + DependOnBookEventQuery
 {
-    async fn get_book(&self, dto: GetBookDto) -> error_stack::Result<Option<BookDto>, KernelError> {
+    async fn get_book(&self, dto: GetBookDto) -> error_stack::Result<Option<Book>, KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
         let id = dto.id;
@@ -62,10 +60,7 @@ pub trait GetBookService:
         }
         connection.commit().await?;
 
-        match book {
-            None => Ok(None),
-            Some(book) => Ok(Some(BookDto::from(book))),
-        }
+        Ok(book)
     }
 }
 
@@ -73,28 +68,3 @@ impl<T> GetBookService for T where
     T: DependOnBookQuery + DependOnBookModifier + DependOnBookEventQuery
 {
 }
-
-#[async_trait::async_trait]
-pub trait CreateBookService: 'static + Sync + Send + DependOnBookEventHandler {
-    async fn create_book(&self, dto: BookDto) -> error_stack::Result<Uuid, KernelError> {
-        let mut connection = self.database_connection().transact().await?;
-
-        let uuid = Uuid::new_v4();
-        let id = BookId::new(uuid);
-        let event = BookEvent::Create {
-            id,
-            title: BookTitle::new(dto.title),
-            amount: BookAmount::new(dto.amount),
-        };
-        let command = CommandInfo::new(event, None);
-
-        self.book_event_handler()
-            .handle(&mut connection, command)
-            .await?;
-        connection.commit().await?;
-
-        Ok(uuid)
-    }
-}
-
-impl<T> CreateBookService for T where T: DependOnBookEventHandler {}

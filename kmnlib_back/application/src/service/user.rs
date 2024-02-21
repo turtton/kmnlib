@@ -8,10 +8,29 @@ use kernel::interface::query::{
 use kernel::interface::update::{
     DependOnUserEventHandler, DependOnUserModifier, UserEventHandler, UserModifier,
 };
-use kernel::prelude::entity::{UserId, UserName, UserRentLimit};
+use kernel::prelude::entity::{User, UserId, UserName, UserRentLimit};
 use kernel::KernelError;
 
 use crate::transfer::{CreateUserDto, DeleteUserDto, GetUserDto, UpdateUserDto, UserDto};
+
+#[async_trait::async_trait]
+pub trait HandleUserService: 'static + Sync + Send + DependOnUserEventHandler {
+    async fn handle_command(
+        &self,
+        command: CommandInfo<UserEvent, User>,
+    ) -> error_stack::Result<UserId, KernelError> {
+        let mut connection = self.database_connection().transact().await?;
+
+        let id = self
+            .user_event_handler()
+            .handle(&mut connection, command)
+            .await?;
+
+        connection.commit().await?;
+
+        Ok(id)
+    }
+}
 
 #[async_trait::async_trait]
 pub trait GetUserService:

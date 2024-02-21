@@ -8,10 +8,31 @@ use kernel::interface::query::{
 use kernel::interface::update::{
     BookEventHandler, BookModifier, DependOnBookEventHandler, DependOnBookModifier,
 };
-use kernel::prelude::entity::{BookAmount, BookId, BookTitle};
+use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle};
 use kernel::KernelError;
 
 use crate::transfer::{BookDto, DeleteBookDto, GetBookDto, UpdateBookDto};
+
+#[async_trait::async_trait]
+pub trait HandleBookService: 'static + Sync + Send + DependOnBookEventHandler {
+    async fn handle_command(
+        &self,
+        command: CommandInfo<BookEvent, Book>,
+    ) -> error_stack::Result<BookId, KernelError> {
+        let mut connection = self.database_connection().transact().await?;
+
+        let id = self
+            .book_event_handler()
+            .handle(&mut connection, command)
+            .await?;
+
+        connection.commit().await?;
+
+        Ok(id)
+    }
+}
+
+impl<T> HandleBookService for T where T: DependOnBookEventHandler {}
 
 #[async_trait::async_trait]
 pub trait GetBookService:

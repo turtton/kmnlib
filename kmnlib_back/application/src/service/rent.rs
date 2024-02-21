@@ -14,6 +14,26 @@ use kernel::prelude::entity::{BookId, EventVersion, Rent, UserId};
 use kernel::KernelError;
 
 #[async_trait::async_trait]
+pub trait HandleRentService: 'static + Sync + Send + DependOnRentEventHandler {
+    async fn handle_command(
+        &self,
+        command: CommandInfo<RentEvent, Rent>,
+    ) -> error_stack::Result<(), KernelError> {
+        let mut connection = self.database_connection().transact().await?;
+
+        self.rent_event_handler()
+            .handle(&mut connection, command)
+            .await?;
+
+        connection.commit().await?;
+
+        Ok(())
+    }
+}
+
+impl<T> HandleRentService for T where T: DependOnRentEventHandler {}
+
+#[async_trait::async_trait]
 pub trait GetRentService:
     'static + Sync + Send + DependOnRentQuery + DependOnRentEventQuery + DependOnRentModifier
 {

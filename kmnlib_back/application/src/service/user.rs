@@ -1,5 +1,3 @@
-use uuid::Uuid;
-
 use kernel::interface::database::{DatabaseConnection, Transaction};
 use kernel::interface::event::{Applier, CommandInfo, UserEvent};
 use kernel::interface::query::{
@@ -8,10 +6,10 @@ use kernel::interface::query::{
 use kernel::interface::update::{
     DependOnUserEventHandler, DependOnUserModifier, UserEventHandler, UserModifier,
 };
-use kernel::prelude::entity::{User, UserId, UserName, UserRentLimit};
+use kernel::prelude::entity::{User, UserId};
 use kernel::KernelError;
 
-use crate::transfer::{CreateUserDto, DeleteUserDto, GetUserDto, UpdateUserDto, UserDto};
+use crate::transfer::{GetUserDto, UserDto};
 
 #[async_trait::async_trait]
 pub trait HandleUserService: 'static + Sync + Send + DependOnUserEventHandler {
@@ -67,7 +65,7 @@ pub trait GetUserService:
 
         match user {
             None => Ok(None),
-            Some(user) => Ok(Some(UserDto::try_from(user)?)),
+            Some(user) => Ok(Some(UserDto::from(user))),
         }
     }
 }
@@ -76,73 +74,3 @@ impl<T> GetUserService for T where
     T: DependOnUserQuery + DependOnUserModifier + DependOnUserEventQuery
 {
 }
-
-#[async_trait::async_trait]
-pub trait CreateUserService: 'static + Sync + Send + DependOnUserEventHandler {
-    async fn create_user(&mut self, dto: CreateUserDto) -> error_stack::Result<Uuid, KernelError> {
-        let mut connection = self.database_connection().transact().await?;
-
-        let uuid = Uuid::new_v4();
-        let id = UserId::new(uuid);
-        let user = UserEvent::Create {
-            id,
-            name: UserName::new(dto.name),
-            rent_limit: UserRentLimit::new(dto.rent_limit),
-        };
-        let command = CommandInfo::new(user, None);
-
-        self.user_event_handler()
-            .handle(&mut connection, command)
-            .await?;
-        connection.commit().await?;
-
-        Ok(uuid)
-    }
-}
-
-impl<T> CreateUserService for T where T: DependOnUserEventHandler {}
-
-#[async_trait::async_trait]
-pub trait UpdateUserService: 'static + Sync + Send + DependOnUserEventHandler {
-    async fn update_user(&mut self, dto: UpdateUserDto) -> error_stack::Result<(), KernelError> {
-        let mut connection = self.database_connection().transact().await?;
-
-        let id = UserId::new(dto.id);
-
-        let user = UserEvent::Update {
-            id,
-            name: dto.name.map(UserName::new),
-            rent_limit: dto.rent_limit.map(UserRentLimit::new),
-        };
-        let command = CommandInfo::new(user, None);
-
-        self.user_event_handler()
-            .handle(&mut connection, command)
-            .await?;
-        connection.commit().await?;
-
-        Ok(())
-    }
-}
-
-impl<T> UpdateUserService for T where T: DependOnUserEventHandler {}
-
-#[async_trait::async_trait]
-pub trait DeleteUserService: 'static + Sync + Send + DependOnUserEventHandler {
-    async fn delete_user(&mut self, dto: DeleteUserDto) -> error_stack::Result<(), KernelError> {
-        let mut connection = self.database_connection().transact().await?;
-
-        let id = UserId::new(dto.id);
-        let user = UserEvent::Delete { id };
-        let command = CommandInfo::new(user, None);
-
-        self.user_event_handler()
-            .handle(&mut connection, command)
-            .await?;
-        connection.commit().await?;
-
-        Ok(())
-    }
-}
-
-impl<T> DeleteUserService for T where T: DependOnUserEventHandler {}

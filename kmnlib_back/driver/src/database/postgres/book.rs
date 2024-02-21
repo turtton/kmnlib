@@ -12,7 +12,9 @@ use kernel::interface::query::{
 use kernel::interface::update::{
     BookEventHandler, BookModifier, DependOnBookEventHandler, DependOnBookModifier,
 };
-use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, CreatedAt, EventVersion};
+use kernel::prelude::entity::{
+    Book, BookAmount, BookId, BookTitle, CreatedAt, EventVersion, ExpectedEventVersion,
+};
 use kernel::KernelError;
 
 use crate::database::postgres::PostgresTransaction;
@@ -276,16 +278,18 @@ impl PgBookInternal {
                 .convert_error()?;
             }
             Some(version) => {
-                let mut version = version;
-                if let EventVersion::Nothing = version {
-                    let event = PgBookInternal::get_events(con, &id, None).await?;
-                    if !event.is_empty() {
-                        return Err(Report::new(KernelError::Concurrency)
-                            .attach_printable("Event stream is already exists"));
-                    } else {
-                        version = EventVersion::new(1);
+                let version = match version {
+                    ExpectedEventVersion::Nothing => {
+                        let event = PgBookInternal::get_events(con, &id, None).await?;
+                        if !event.is_empty() {
+                            return Err(Report::new(KernelError::Concurrency)
+                                .attach_printable("Event stream is already exists"));
+                        } else {
+                            EventVersion::new(1)
+                        }
                     }
-                }
+                    ExpectedEventVersion::Exact(version) => version,
+                };
                 // language=postgresql
                 sqlx::query(
                     r#"
@@ -347,7 +351,9 @@ mod test {
     use kernel::interface::event::{BookEvent, CommandInfo};
     use kernel::interface::query::{BookEventQuery, BookQuery};
     use kernel::interface::update::{BookEventHandler, BookModifier};
-    use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
+    use kernel::prelude::entity::{
+        Book, BookAmount, BookId, BookTitle, EventVersion, ExpectedEventVersion,
+    };
     use kernel::KernelError;
 
     use crate::database::postgres::book::PostgresBookRepository;
@@ -399,7 +405,7 @@ mod test {
             title,
             amount,
         };
-        let create_command = CommandInfo::new(create_event, None);
+        let create_command: CommandInfo<BookEvent, Book> = CommandInfo::new(create_event, None);
         PostgresBookRepository
             .handle(&mut con, create_command.clone())
             .await?;

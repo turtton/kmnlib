@@ -1,8 +1,6 @@
-use error_stack::Report;
 use uuid::Uuid;
 
 use kernel::prelude::entity::{Book, DestructBook};
-use kernel::KernelError;
 
 #[derive(Debug, Clone)]
 pub struct BookDto {
@@ -12,39 +10,23 @@ pub struct BookDto {
     pub version: i64,
 }
 
-impl TryFrom<Book> for BookDto {
-    type Error = Report<KernelError>;
-    fn try_from(value: Book) -> Result<Self, Self::Error> {
+impl From<Book> for BookDto {
+    fn from(value: Book) -> Self {
         let DestructBook {
             id,
             title,
             amount,
             version,
         } = value.into_destruct();
-        Ok(Self {
+        Self {
             id: id.into(),
             title: title.into(),
             amount: amount.into(),
-            version: version.try_into()?,
-        })
+            version: version.into(),
+        }
     }
 }
 
 pub struct GetBookDto {
-    pub id: Uuid,
-}
-
-pub struct CreateBookDto {
-    pub title: String,
-    pub amount: i32,
-}
-
-pub struct UpdateBookDto {
-    pub id: Uuid,
-    pub title: Option<String>,
-    pub amount: Option<i32>,
-}
-
-pub struct DeleteBookDto {
     pub id: Uuid,
 }

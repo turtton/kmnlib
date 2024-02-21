@@ -12,7 +12,9 @@ use kernel::interface::query::{
 use kernel::interface::update::{
     DependOnRentEventHandler, DependOnRentModifier, RentEventHandler, RentModifier,
 };
-use kernel::prelude::entity::{BookId, CreatedAt, EventVersion, Rent, UserId};
+use kernel::prelude::entity::{
+    BookId, CreatedAt, EventVersion, ExpectedEventVersion, Rent, UserId,
+};
 use kernel::KernelError;
 
 use crate::database::postgres::PostgresTransaction;
@@ -323,16 +325,19 @@ impl PgRentInternal {
                 .convert_error()?;
             }
             Some(version) => {
-                let mut version = version;
-                if let EventVersion::Nothing = version {
-                    let event = PgRentInternal::get_events(con, &book_id, &user_id, None).await?;
-                    if !event.is_empty() {
-                        return Err(Report::new(KernelError::Concurrency)
-                            .attach_printable("Event stream already exists"));
-                    } else {
-                        version = EventVersion::new(1);
+                let version = match version {
+                    ExpectedEventVersion::Nothing => {
+                        let event =
+                            PgRentInternal::get_events(con, &book_id, &user_id, None).await?;
+                        if !event.is_empty() {
+                            return Err(Report::new(KernelError::Concurrency)
+                                .attach_printable("Event stream already exists"));
+                        } else {
+                            EventVersion::new(1)
+                        }
                     }
-                }
+                    ExpectedEventVersion::Exact(version) => version,
+                };
 
                 // language=postgresql
                 sqlx::query(
@@ -470,8 +475,8 @@ mod test {
     use kernel::interface::query::{RentEventQuery, RentQuery};
     use kernel::interface::update::{BookModifier, RentEventHandler, RentModifier, UserModifier};
     use kernel::prelude::entity::{
-        Book, BookAmount, BookId, BookTitle, EventVersion, Rent, User, UserId, UserName,
-        UserRentLimit,
+        Book, BookAmount, BookId, BookTitle, EventVersion, ExpectedEventVersion, Rent, User,
+        UserId, UserName, UserRentLimit,
     };
     use kernel::KernelError;
 
@@ -534,7 +539,7 @@ mod test {
             book_id: book_id.clone(),
             user_id: user_id.clone(),
         };
-        let rent_command = CommandInfo::new(rent_event, Some(EventVersion::Nothing));
+        let rent_command = CommandInfo::new(rent_event, Some(ExpectedEventVersion::Nothing));
         PostgresRentRepository
             .handle(&mut con, rent_command.clone())
             .await?;
@@ -551,7 +556,10 @@ mod test {
             book_id: book_id.clone(),
             user_id: user_id.clone(),
         };
-        let return_command = CommandInfo::new(return_event, Some(EventVersion::new(2)));
+        let return_command = CommandInfo::new(
+            return_event,
+            Some(ExpectedEventVersion::Exact(EventVersion::new(2))),
+        );
         PostgresRentRepository
             .handle(&mut con, return_command.clone())
             .await?;

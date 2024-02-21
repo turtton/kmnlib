@@ -1,6 +1,4 @@
-use error_stack::Report;
 use kernel::prelude::entity::{DestructUser, User};
-use kernel::KernelError;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -11,39 +9,23 @@ pub struct UserDto {
     pub version: i64,
 }
 
-impl TryFrom<User> for UserDto {
-    type Error = Report<KernelError>;
-    fn try_from(value: User) -> Result<Self, Self::Error> {
+impl From<User> for UserDto {
+    fn from(value: User) -> Self {
         let DestructUser {
             id,
             name,
             rent_limit,
             version,
         } = value.into_destruct();
-        Ok(Self {
+        Self {
             id: id.into(),
             name: name.into(),
             rent_limit: rent_limit.into(),
-            version: version.try_into()?,
-        })
+            version: version.into(),
+        }
     }
 }
 
 pub struct GetUserDto {
-    pub id: Uuid,
-}
-
-pub struct CreateUserDto {
-    pub name: String,
-    pub rent_limit: i32,
-}
-
-pub struct UpdateUserDto {
-    pub id: Uuid,
-    pub name: Option<String>,
-    pub rent_limit: Option<i32>,
-}
-
-pub struct DeleteUserDto {
     pub id: Uuid,
 }

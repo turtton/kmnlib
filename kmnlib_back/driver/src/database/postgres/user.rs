@@ -12,7 +12,9 @@ use kernel::interface::query::{
 use kernel::interface::update::{
     DependOnUserEventHandler, DependOnUserModifier, UserEventHandler, UserModifier,
 };
-use kernel::prelude::entity::{CreatedAt, EventVersion, User, UserId, UserName, UserRentLimit};
+use kernel::prelude::entity::{
+    CreatedAt, EventVersion, ExpectedEventVersion, User, UserId, UserName, UserRentLimit,
+};
 use kernel::KernelError;
 
 use crate::database::postgres::PostgresTransaction;
@@ -268,16 +270,18 @@ impl PgUserInternal {
                     .convert_error()?;
             }
             Some(version) => {
-                let mut version = version;
-                if let EventVersion::Nothing = version {
-                    let event = PgUserInternal::get_events(con, &id, None).await?;
-                    if !event.is_empty() {
-                        return Err(Report::new(KernelError::Concurrency)
-                            .attach_printable("Event stream is already exists"));
-                    } else {
-                        version = EventVersion::new(1);
+                let version = match version {
+                    ExpectedEventVersion::Nothing => {
+                        let event = PgUserInternal::get_events(con, &id, None).await?;
+                        if !event.is_empty() {
+                            return Err(Report::new(KernelError::Concurrency)
+                                .attach_printable("Event stream is already exists"));
+                        } else {
+                            EventVersion::new(1)
+                        }
                     }
-                }
+                    ExpectedEventVersion::Exact(version) => version,
+                };
                 // language=postgresql
                 sqlx::query(
                     r#"

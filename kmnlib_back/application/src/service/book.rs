@@ -11,7 +11,7 @@ use kernel::interface::update::{
 use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle};
 use kernel::KernelError;
 
-use crate::transfer::{BookDto, DeleteBookDto, GetBookDto, UpdateBookDto};
+use crate::transfer::{BookDto, GetBookDto};
 
 #[async_trait::async_trait]
 pub trait HandleBookService: 'static + Sync + Send + DependOnBookEventHandler {
@@ -64,7 +64,7 @@ pub trait GetBookService:
 
         match book {
             None => Ok(None),
-            Some(book) => Ok(Some(BookDto::try_from(book)?)),
+            Some(book) => Ok(Some(BookDto::from(book))),
         }
     }
 }
@@ -98,45 +98,3 @@ pub trait CreateBookService: 'static + Sync + Send + DependOnBookEventHandler {
 }
 
 impl<T> CreateBookService for T where T: DependOnBookEventHandler {}
-
-#[async_trait::async_trait]
-pub trait UpdateBookService: 'static + Sync + Send + DependOnBookEventHandler {
-    async fn update_book(&self, dto: UpdateBookDto) -> error_stack::Result<(), KernelError> {
-        let mut connection = self.database_connection().transact().await?;
-        let id = BookId::new(dto.id);
-        let event = BookEvent::Update {
-            id,
-            title: dto.title.map(BookTitle::new),
-            amount: dto.amount.map(BookAmount::new),
-        };
-        let command = CommandInfo::new(event, None);
-        self.book_event_handler()
-            .handle(&mut connection, command)
-            .await?;
-        connection.commit().await?;
-
-        Ok(())
-    }
-}
-
-impl<T> UpdateBookService for T where T: DependOnBookEventHandler {}
-
-#[async_trait::async_trait]
-pub trait DeleteBookService: 'static + Sync + Send + DependOnBookEventHandler {
-    async fn delete_book(&self, dto: DeleteBookDto) -> error_stack::Result<(), KernelError> {
-        let mut connection = self.database_connection().transact().await?;
-
-        let id = BookId::new(dto.id);
-        let event = BookEvent::Delete { id };
-        let command = CommandInfo::new(event, None);
-
-        self.book_event_handler()
-            .handle(&mut connection, command)
-            .await?;
-        connection.commit().await?;
-
-        Ok(())
-    }
-}
-
-impl<T> DeleteBookService for T where T: DependOnBookEventHandler {}

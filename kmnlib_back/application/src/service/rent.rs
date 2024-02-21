@@ -1,7 +1,4 @@
-use crate::transfer::{
-    CreateRentDto, GetRentFromBookIdDto, GetRentFromIdDto, GetRentFromUserIdDto, RentDto,
-};
-use error_stack::Report;
+use crate::transfer::{GetRentFromBookIdDto, GetRentFromIdDto, GetRentFromUserIdDto, RentDto};
 use kernel::interface::database::{DatabaseConnection, Transaction};
 use kernel::interface::event::{Applier, CommandInfo, DestructEventInfo, RentEvent};
 use kernel::interface::query::{
@@ -10,7 +7,7 @@ use kernel::interface::query::{
 use kernel::interface::update::{
     DependOnRentEventHandler, DependOnRentModifier, RentEventHandler, RentModifier,
 };
-use kernel::prelude::entity::{BookId, EventVersion, Rent, UserId};
+use kernel::prelude::entity::{BookId, Rent, UserId};
 use kernel::KernelError;
 
 #[async_trait::async_trait]
@@ -83,8 +80,8 @@ pub trait GetRentService:
 
         Ok(rents
             .into_iter()
-            .map(RentDto::try_from)
-            .collect::<Result<Vec<RentDto>, Report<KernelError>>>()?)
+            .map(RentDto::from)
+            .collect::<Vec<RentDto>>())
     }
 
     async fn get_rent_from_user(
@@ -133,8 +130,8 @@ pub trait GetRentService:
 
         Ok(rents
             .into_iter()
-            .map(RentDto::try_from)
-            .collect::<Result<Vec<RentDto>, Report<KernelError>>>()?)
+            .map(RentDto::from)
+            .collect::<Vec<RentDto>>())
     }
 
     async fn get_rent_from_id(
@@ -173,7 +170,7 @@ pub trait GetRentService:
         }
         connection.commit().await?;
 
-        Ok(rents.map(RentDto::try_from).transpose()?)
+        Ok(rents.map(RentDto::from))
     }
 }
 
@@ -181,47 +178,3 @@ impl<T> GetRentService for T where
     T: DependOnRentQuery + DependOnRentEventQuery + DependOnRentModifier
 {
 }
-
-#[async_trait::async_trait]
-pub trait RentService: 'static + Sync + Send + DependOnRentEventHandler {
-    async fn rent_book(&mut self, dto: CreateRentDto) -> error_stack::Result<(), KernelError> {
-        let mut connection = self.database_connection().transact().await?;
-
-        let version = EventVersion::new(dto.version);
-        let book_id = BookId::new(dto.book_id);
-        let user_id = UserId::new(dto.user_id);
-        let rent = RentEvent::Rent {
-            book_id: book_id.clone(),
-            user_id: user_id.clone(),
-        };
-        let command = CommandInfo::new(rent, Some(version));
-        self.rent_event_handler()
-            .handle(&mut connection, command)
-            .await?;
-        connection.commit().await?;
-
-        Ok(())
-    }
-}
-
-impl<T> RentService for T where T: DependOnRentEventHandler {}
-
-#[async_trait::async_trait]
-pub trait ReturnService: 'static + Sync + Send + DependOnRentEventHandler {
-    async fn return_book(&mut self, dto: CreateRentDto) -> error_stack::Result<(), KernelError> {
-        let mut connection = self.database_connection().transact().await?;
-
-        let version = EventVersion::new(dto.version);
-        let book_id = BookId::new(dto.book_id);
-        let user_id = UserId::new(dto.user_id);
-        let rent = RentEvent::Return { book_id, user_id };
-        let command = CommandInfo::new(rent, Some(version));
-        self.rent_event_handler()
-            .handle(&mut connection, command)
-            .await?;
-
-        Ok(())
-    }
-}
-
-impl<T> ReturnService for T where T: DependOnRentEventHandler {}

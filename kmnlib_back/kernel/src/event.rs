@@ -2,7 +2,7 @@ use destructure::Destructure;
 use error_stack::Report;
 use vodca::References;
 
-use crate::entity::{CreatedAt, EventVersion};
+use crate::entity::{CreatedAt, EventVersion, ExpectedEventVersion};
 use crate::KernelError;
 
 pub use self::{book::*, rent::*, user::*};
@@ -35,11 +35,11 @@ pub trait Applier<Event>: 'static + Sync + Send {
 #[derive(Debug, Clone, Eq, PartialEq, Destructure)]
 pub struct CommandInfo<Event, Entity> {
     event: Event,
-    version: Option<EventVersion<Entity>>,
+    version: Option<ExpectedEventVersion<Entity>>,
 }
 
 impl<Event, Entity> CommandInfo<Event, Entity> {
-    pub fn new(event: Event, version: Option<EventVersion<Entity>>) -> Self {
+    pub fn new(event: Event, version: Option<ExpectedEventVersion<Entity>>) -> Self {
         Self { event, version }
     }
 }

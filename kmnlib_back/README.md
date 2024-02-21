@@ -2,6 +2,8 @@
 
 Backend of kmnlib
 
+This project is a playground to compare with [architectured](https://github.com/HalsekiRaika/architectured).
+
 # Architecture
 
 CQRS + Event Sourcing + Partial Clean Architecture + Minimal Cake Pattern + Actor Model

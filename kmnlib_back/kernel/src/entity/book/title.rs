@@ -1,6 +1,7 @@
+use serde::{Deserialize, Serialize};
 use vodca::{AsRefln, Fromln};
 
-#[derive(Debug, Clone, Eq, PartialEq, Fromln, AsRefln)]
+#[derive(Debug, Clone, Eq, PartialEq, Fromln, AsRefln, Serialize, Deserialize)]
 pub struct BookTitle(String);
 
 impl BookTitle {

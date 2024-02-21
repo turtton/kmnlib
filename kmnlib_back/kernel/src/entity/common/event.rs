@@ -1,5 +1,6 @@
 use crate::KernelError;
 use error_stack::{Report, ResultExt};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::marker::PhantomData;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -41,5 +42,26 @@ impl<T> AsRef<i64> for EventVersion<T> {
             Self::Nothing => &-1,
             Self::Exact(version, _) => version,
         }
+    }
+}
+
+impl<T> Serialize for EventVersion<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::Nothing => (-1).serialize(serializer),
+            Self::Exact(version, _) => version.serialize(serializer),
+        }
+    }
+}
+
+impl<'de, T> Deserialize<'de> for EventVersion<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        <i64>::deserialize(deserializer).map(|version| Self::new(version))
     }
 }

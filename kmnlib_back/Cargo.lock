@@ -1158,6 +1158,7 @@ dependencies = [
  "async-trait",
  "destructure",
  "error-stack",
+ "serde",
  "strum",
  "time",
  "uuid",
@@ -2105,6 +2106,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "uuid",
  "vodca",
 ]
 

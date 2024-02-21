@@ -13,12 +13,10 @@ use crate::transfer::GetBookDto;
 
 #[async_trait::async_trait]
 pub trait HandleBookService: 'static + Sync + Send + DependOnBookEventHandler {
-    async fn handle_command(
-        &self,
-        command: CommandInfo<BookEvent, Book>,
-    ) -> error_stack::Result<BookId, KernelError> {
+    async fn handle_event(&self, event: BookEvent) -> error_stack::Result<BookId, KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
+        let command = CommandInfo::new(event, None);
         let id = self
             .book_event_handler()
             .handle(&mut connection, command)

@@ -44,9 +44,7 @@ paths:
         content:
           application/json:
             schema:
-              type: array
-              items:
-                $ref: "#/components/schemas/User"
+              $ref: "#/components/schemas/User"
       responses:
         "201":
           description: "successful operation"
@@ -168,9 +166,7 @@ paths:
         content:
           application/json:
             schema:
-              type: array
-              items:
-                $ref: "#/components/schemas/Book"
+              $ref: "#/components/schemas/Book"
       responses:
         "201":
           description: "successful operation"
@@ -237,25 +233,47 @@ paths:
 
 components:
   schemas:
+    CreateUser:
+      type: object
+      properties:
+        name:
+          type: string
+        rent_limit:
+          type: integer
+          format: int64
     User:
       type: object
       properties:
         id:
-          type: integer
-          format: int64
+          type: string
+          format: uuid
         name:
           type: string
         rent_limit:
+          type: integer
+          format: int64
+        version:
+          type: integer
+          format: int64
+    CreateBook:
+      type: object
+      properties:
+        title:
+          type: string
+        amount:
           type: integer
           format: int64
     Book:
       type: object
       properties:
         id:
-          type: integer
-          format: int64
-        name:
+          type: string
+          format: uuid
+        title:
           type: string
         amount:
+          type: integer
+          format: int64
+        version:
           type: integer
           format: int64

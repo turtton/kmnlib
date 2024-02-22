@@ -9,7 +9,7 @@ use crate::route::book::request::{
 };
 use crate::route::book::response::{BookResponse, Presenter};
 use application::service::{GetBookService, HandleBookService};
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
@@ -25,7 +25,7 @@ impl BookRouter for Router<AppModule> {
         self.route(
             "/books",
             get(
-                |State(handler): State<AppModule>, Path(req): Path<GetAllRequest>| async move {
+                |State(handler): State<AppModule>, Query(req): Query<GetAllRequest>| async move {
                     Controller::new(Transformer, Presenter)
                         .intake(req)
                         .handle(|dto| handler.pgpool().get_all(dto))

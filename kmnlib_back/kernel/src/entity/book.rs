@@ -4,6 +4,7 @@ mod title;
 
 pub use self::{amount::*, id::*, title::*};
 use crate::entity::common::EventVersion;
+use crate::entity::IsDeleted;
 use destructure::{Destructure, Mutation};
 use vodca::References;
 
@@ -13,6 +14,7 @@ pub struct Book {
     title: BookTitle,
     amount: BookAmount,
     version: EventVersion<Book>,
+    is_deleted: IsDeleted<Book>,
 }
 
 impl Book {
@@ -21,12 +23,14 @@ impl Book {
         title: BookTitle,
         amount: BookAmount,
         version: EventVersion<Book>,
+        is_deleted: IsDeleted<Book>,
     ) -> Self {
         Self {
             id,
             title,
             amount,
             version,
+            is_deleted,
         }
     }
 }

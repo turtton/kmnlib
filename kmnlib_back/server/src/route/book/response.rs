@@ -1,9 +1,7 @@
-use axum::Json;
 use crate::controller::Exhaust;
 use axum::response::{IntoResponse, Response};
 use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, DestructBook};
 use serde::Serialize;
-use serde_json::Value;
 
 #[derive(Debug, Serialize)]
 pub struct CreatedResponse {
@@ -11,7 +9,7 @@ pub struct CreatedResponse {
 }
 
 impl IntoResponse for CreatedResponse {
-    fn into_response(self) -> axum::response::Response {
+    fn into_response(self) -> Response {
         (axum::http::StatusCode::CREATED, axum::Json(self)).into_response()
     }
 }
@@ -24,7 +22,7 @@ pub struct BookResponse {
 }
 
 impl IntoResponse for BookResponse {
-    fn into_response(self) -> axum::response::Response {
+    fn into_response(self) -> Response {
         (axum::http::StatusCode::OK, axum::Json(self)).into_response()
     }
 }
@@ -51,7 +49,7 @@ impl Exhaust<Option<Book>> for Presenter {
 }
 
 impl Exhaust<Vec<Book>> for Presenter {
-    type To = Json<Vec<BookResponse>>;
+    type To = axum::Json<Vec<BookResponse>>;
     fn emit(&self, input: Vec<Book>) -> Self::To {
         let result = input
             .into_iter()
@@ -63,6 +61,6 @@ impl Exhaust<Vec<Book>> for Presenter {
             })
             .collect::<Vec<_>>();
 
-        Json::from(result)
+        axum::Json::from(result)
     }
 }

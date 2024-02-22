@@ -13,7 +13,7 @@ use kernel::interface::update::{
     BookEventHandler, BookModifier, DependOnBookEventHandler, DependOnBookModifier,
 };
 use kernel::prelude::entity::{
-    Book, BookAmount, BookId, BookTitle, CreatedAt, EventVersion, ExpectedEventVersion,
+    Book, BookAmount, BookId, BookTitle, CreatedAt, EventVersion, ExpectedEventVersion, IsDeleted,
     SelectLimit, SelectOffset,
 };
 use kernel::KernelError;
@@ -133,6 +133,7 @@ struct BookRow {
     title: String,
     amount: i32,
     version: i64,
+    is_deleted: bool,
 }
 
 impl From<BookRow> for Book {
@@ -142,6 +143,7 @@ impl From<BookRow> for Book {
             BookTitle::new(value.title),
             BookAmount::new(value.amount),
             EventVersion::new(value.version),
+            IsDeleted::new(value.is_deleted),
         )
     }
 }
@@ -387,7 +389,7 @@ mod test {
     use kernel::interface::event::{BookEvent, CommandInfo};
     use kernel::interface::query::{BookEventQuery, BookQuery};
     use kernel::interface::update::{BookEventHandler, BookModifier};
-    use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, EventVersion};
+    use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, EventVersion, IsDeleted};
     use kernel::KernelError;
 
     use crate::database::postgres::book::PostgresBookRepository;
@@ -405,6 +407,7 @@ mod test {
             BookTitle::new("test".to_string()),
             BookAmount::new(1),
             EventVersion::new(0),
+            IsDeleted::new(false),
         );
         PostgresBookRepository.create(&mut con, &book).await?;
 

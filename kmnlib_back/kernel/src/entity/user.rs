@@ -4,6 +4,7 @@ mod rent_limit;
 
 pub use self::{id::*, name::*, rent_limit::*};
 use crate::entity::common::EventVersion;
+use crate::entity::IsDeleted;
 use destructure::{Destructure, Mutation};
 use vodca::References;
 
@@ -13,6 +14,7 @@ pub struct User {
     name: UserName,
     rent_limit: UserRentLimit,
     version: EventVersion<User>,
+    is_deleted: IsDeleted<User>,
 }
 
 impl User {
@@ -21,12 +23,14 @@ impl User {
         name: UserName,
         rent_limit: UserRentLimit,
         version: EventVersion<User>,
+        is_deleted: IsDeleted<User>,
     ) -> Self {
         Self {
             id,
             name,
             rent_limit,
             version,
+            is_deleted,
         }
     }
 }

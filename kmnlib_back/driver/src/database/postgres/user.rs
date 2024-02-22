@@ -12,9 +12,7 @@ use kernel::interface::query::{
 use kernel::interface::update::{
     DependOnUserEventHandler, DependOnUserModifier, UserEventHandler, UserModifier,
 };
-use kernel::prelude::entity::{
-    CreatedAt, EventVersion, ExpectedEventVersion, User, UserId, UserName, UserRentLimit,
-};
+use kernel::prelude::entity::{CreatedAt, EventVersion, ExpectedEventVersion, IsDeleted, User, UserId, UserName, UserRentLimit};
 use kernel::KernelError;
 
 use crate::database::postgres::PostgresTransaction;
@@ -122,6 +120,7 @@ struct UserRow {
     name: String,
     rent_limit: i32,
     version: i64,
+    is_deleted: bool
 }
 
 impl From<UserRow> for User {
@@ -131,6 +130,7 @@ impl From<UserRow> for User {
             UserName::new(row.name),
             UserRentLimit::new(row.rent_limit),
             EventVersion::new(row.version),
+            IsDeleted::new(row.is_deleted)
         )
     }
 }
@@ -347,7 +347,7 @@ mod test {
     use kernel::interface::event::{CommandInfo, UserEvent};
     use kernel::interface::query::{UserEventQuery, UserQuery};
     use kernel::interface::update::{UserEventHandler, UserModifier};
-    use kernel::prelude::entity::{EventVersion, User, UserId, UserName, UserRentLimit};
+    use kernel::prelude::entity::{EventVersion, IsDeleted, User, UserId, UserName, UserRentLimit};
     use kernel::KernelError;
 
     use crate::database::postgres::user::PostgresUserRepository;
@@ -366,6 +366,7 @@ mod test {
             UserName::new("test".to_string()),
             UserRentLimit::new(1),
             EventVersion::new(0),
+            IsDeleted::new(false),
         );
 
         PostgresUserRepository

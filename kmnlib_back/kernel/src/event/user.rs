@@ -1,7 +1,7 @@
 use destructure::Destructure;
 use error_stack::Report;
 
-use crate::entity::{User, UserId, UserName, UserRentLimit};
+use crate::entity::{IsDeleted, User, UserId, UserName, UserRentLimit};
 use crate::event::{Applier, DestructEventInfo, EventInfo, EventRowFieldAttachments};
 use crate::KernelError;
 
@@ -26,6 +26,29 @@ pub enum UserEvent {
     },
 }
 
+impl Applier<EventInfo<UserEvent, User>> for User {
+    fn apply(&mut self, event: EventInfo<UserEvent, User>) {
+        let DestructEventInfo { event, version, .. } = event.into_destruct();
+        match event {
+            UserEvent::Create { .. } => {}
+            UserEvent::Update {
+                name, rent_limit, ..
+            } => self.substitute(|user| {
+                if let Some(name) = name {
+                    *user.name = name;
+                }
+                if let Some(rent_limit) = rent_limit {
+                    *user.rent_limit = rent_limit;
+                }
+                *user.version = version;
+            }),
+            UserEvent::Delete { .. } => {
+                self.substitute(|user| *user.is_deleted = IsDeleted::new(true))
+            }
+        }
+    }
+}
+
 impl Applier<EventInfo<UserEvent, User>> for Option<User> {
     fn apply(&mut self, event: EventInfo<UserEvent, User>) {
         let DestructEventInfo { event, version, .. } = event.into_destruct();
@@ -38,26 +61,30 @@ impl Applier<EventInfo<UserEvent, User>> for Option<User> {
                     rent_limit,
                 },
             ) => {
-                *option = Some(User::new(id, name, rent_limit, version));
+                *option = Some(User::new(
+                    id,
+                    name,
+                    rent_limit,
+                    version,
+                    IsDeleted::new(false),
+                ))
             }
             (
                 Some(user),
                 UserEvent::Update {
                     name, rent_limit, ..
                 },
-            ) => {
-                user.substitute(|user| {
-                    if let Some(name) = name {
-                        *user.name = name;
-                    }
-                    if let Some(rent_limit) = rent_limit {
-                        *user.rent_limit = rent_limit;
-                    }
-                    *user.version = version;
-                });
-            }
-            (option, UserEvent::Delete { .. }) => {
-                *option = None;
+            ) => user.substitute(|user| {
+                if let Some(name) = name {
+                    *user.name = name;
+                }
+                if let Some(rent_limit) = rent_limit {
+                    *user.rent_limit = rent_limit;
+                }
+                *user.version = version;
+            }),
+            (Some(user), UserEvent::Delete { .. }) => {
+                user.substitute(|user| *user.is_deleted = IsDeleted::new(true))
             }
             _ => {}
         }

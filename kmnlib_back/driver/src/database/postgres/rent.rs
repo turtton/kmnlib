@@ -475,8 +475,8 @@ mod test {
     use kernel::interface::query::{RentEventQuery, RentQuery};
     use kernel::interface::update::{BookModifier, RentEventHandler, RentModifier, UserModifier};
     use kernel::prelude::entity::{
-        Book, BookAmount, BookId, BookTitle, EventVersion, ExpectedEventVersion, Rent, User,
-        UserId, UserName, UserRentLimit,
+        Book, BookAmount, BookId, BookTitle, EventVersion, ExpectedEventVersion, IsDeleted, Rent,
+        User, UserId, UserName, UserRentLimit,
     };
     use kernel::KernelError;
 
@@ -495,6 +495,7 @@ mod test {
             BookTitle::new("title".to_string()),
             BookAmount::new(1),
             EventVersion::new(0),
+            IsDeleted::new(false),
         );
         PostgresBookRepository.create(&mut con, &book).await?;
 
@@ -504,6 +505,7 @@ mod test {
             UserName::new("name".to_string()),
             UserRentLimit::new(1),
             EventVersion::new(0),
+            IsDeleted::new(false),
         );
         PostgresUserRepository.create(&mut con, &user).await?;
 

@@ -40,33 +40,25 @@ pub trait GetBookService:
     ) -> error_stack::Result<Vec<Book>, KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
-        let books = self
+        let mut books = self
             .book_query()
             .get_all(&mut connection, &limit, &offset)
             .await?;
 
-        let mut result = Vec::new();
-        for book in books {
-            // TODO: Add is_deleted in entity to applier implement for Book and delete this clone.
-            let id = book.id().clone();
+        for book in &mut books {
             let events = self
                 .book_event_query()
-                .get_events(&mut connection, &id, Some(book.version()))
+                .get_events(&mut connection, book.id(), Some(book.version()))
                 .await?;
-            let mut book = Some(book);
-            events.into_iter().for_each(|e| book.apply(e));
-            match book {
-                None => self.book_modifier().delete(&mut connection, &id).await?,
-                Some(book) => {
-                    self.book_modifier().update(&mut connection, &book).await?;
-                    result.push(book)
-                }
+            if !events.is_empty() {
+                events.into_iter().for_each(|e| book.apply(e));
+                self.book_modifier().update(&mut connection, book).await?;
             }
         }
 
         connection.commit().await?;
 
-        Ok(result)
+        Ok(books)
     }
 
     async fn get_book(&self, dto: GetBookDto) -> error_stack::Result<Option<Book>, KernelError> {
@@ -88,7 +80,7 @@ pub trait GetBookService:
         match (book_exists, &book) {
             (false, Some(book)) => self.book_modifier().create(&mut connection, book).await?,
             (true, Some(book)) => self.book_modifier().update(&mut connection, book).await?,
-            (true, None) => self.book_modifier().delete(&mut connection, &id).await?,
+            (true, None) => self.book_modifier().delete(&mut connection, &id).await?, // Not reachable
             (false, None) => (),
         }
         connection.commit().await?;

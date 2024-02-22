@@ -1,7 +1,7 @@
 use destructure::Destructure;
 use error_stack::Report;
 
-use crate::entity::{Book, BookAmount, BookId, BookTitle};
+use crate::entity::{Book, BookAmount, BookId, BookTitle, IsDeleted};
 use crate::event::{Applier, DestructEventInfo, EventInfo, EventRowFieldAttachments};
 use crate::KernelError;
 
@@ -26,12 +26,39 @@ pub enum BookEvent {
     },
 }
 
+impl Applier<EventInfo<BookEvent, Book>> for Book {
+    fn apply(&mut self, event: EventInfo<BookEvent, Book>) {
+        let DestructEventInfo { event, version, .. } = event.into_destruct();
+        match event {
+            BookEvent::Create { .. } => {}
+            BookEvent::Update { title, amount, .. } => self.substitute(|book| {
+                if let Some(title) = title {
+                    *book.title = title;
+                }
+                if let Some(amount) = amount {
+                    *book.amount = amount;
+                }
+                *book.version = version;
+            }),
+            BookEvent::Delete { .. } => {
+                self.substitute(|book| *book.is_deleted = IsDeleted::new(true))
+            }
+        }
+    }
+}
+
 impl Applier<EventInfo<BookEvent, Book>> for Option<Book> {
     fn apply(&mut self, event: EventInfo<BookEvent, Book>) {
         let DestructEventInfo { event, version, .. } = event.into_destruct();
         match (self, event) {
             (option @ None, BookEvent::Create { id, title, amount }) => {
-                *option = Some(Book::new(BookId::new(id), title, amount, version));
+                *option = Some(Book::new(
+                    BookId::new(id),
+                    title,
+                    amount,
+                    version,
+                    IsDeleted::new(false),
+                ));
             }
             (Some(book), BookEvent::Update { title, amount, .. }) => book.substitute(|book| {
                 if let Some(title) = title {
@@ -42,8 +69,8 @@ impl Applier<EventInfo<BookEvent, Book>> for Option<Book> {
                 }
                 *book.version = version;
             }),
-            (option, BookEvent::Delete { .. }) => {
-                *option = None;
+            (Some(book), BookEvent::Delete { .. }) => {
+                book.substitute(|book| *book.is_deleted = IsDeleted::new(true))
             }
             _ => {}
         }

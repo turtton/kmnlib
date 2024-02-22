@@ -17,6 +17,7 @@ erDiagram
         text name
         int rent_limit
         bigint version
+        boolean is_deleted
     }
     user_events {
         bigint version "PK"
@@ -31,6 +32,7 @@ erDiagram
         text title
         int amount
         bigint version
+        boolean is_deleted
     }
     book_rents {
         bigint version "PK"

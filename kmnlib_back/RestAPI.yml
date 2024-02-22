@@ -252,9 +252,6 @@ components:
         rent_limit:
           type: integer
           format: int64
-        version:
-          type: integer
-          format: int64
     CreateBook:
       type: object
       properties:
@@ -272,8 +269,5 @@ components:
         title:
           type: string
         amount:
-          type: integer
-          format: int64
-        version:
           type: integer
           format: int64

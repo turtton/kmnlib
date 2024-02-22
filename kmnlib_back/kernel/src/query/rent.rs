@@ -11,7 +11,7 @@ pub trait RentQuery: Sync + Send + 'static {
         con: &mut Self::Transaction,
         book_id: &BookId,
         user_id: &UserId,
-    ) -> error_stack::Result<Option<Rent>, KernelError>;
+    ) -> error_stack::Result<Vec<Rent>, KernelError>;
     async fn find_by_book_id(
         &self,
         con: &mut Self::Transaction,

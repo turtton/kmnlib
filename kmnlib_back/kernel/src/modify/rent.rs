@@ -10,6 +10,12 @@ pub trait RentModifier: 'static + Sync + Send {
         con: &mut Self::Transaction,
         rent: &Rent,
     ) -> error_stack::Result<(), KernelError>;
+
+    async fn update(
+        &self,
+        con: &mut Self::Transaction,
+        rent: &Rent,
+    ) -> error_stack::Result<(), KernelError>;
     async fn delete(
         &self,
         con: &mut Self::Transaction,

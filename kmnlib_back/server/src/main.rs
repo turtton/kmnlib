@@ -1,6 +1,6 @@
 use crate::error::StackTrace;
 use crate::handler::AppModule;
-use crate::route::BookRouter;
+use crate::route::{BookRouter, RentRouter, UserRouter};
 use error_stack::ResultExt;
 use kernel::KernelError;
 use std::net::SocketAddr;
@@ -41,6 +41,8 @@ async fn main() -> Result<(), StackTrace> {
 
     let router = axum::Router::new()
         .route_book()
+        .route_user()
+        .route_rent()
         .layer(
             CorsLayer::new(), //TODO .allow_origin([""])
         )

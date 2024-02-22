@@ -36,13 +36,13 @@ pub trait GetBookService:
 {
     async fn get_all(
         &self,
-        GetAllBookDto { limit, offset }: GetAllBookDto,
+        GetAllBookDto { limit, offset }: &GetAllBookDto,
     ) -> error_stack::Result<Vec<Book>, KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
         let mut books = self
             .book_query()
-            .get_all(&mut connection, &limit, &offset)
+            .get_all(&mut connection, limit, offset)
             .await?;
 
         for book in &mut books {
@@ -61,18 +61,19 @@ pub trait GetBookService:
         Ok(books)
     }
 
-    async fn get_book(&self, dto: GetBookDto) -> error_stack::Result<Option<Book>, KernelError> {
+    async fn get_book(
+        &self,
+        GetBookDto { id }: &GetBookDto,
+    ) -> error_stack::Result<Option<Book>, KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
-        let id = dto.id;
-        let id = BookId::new(id);
-        let mut book = self.book_query().find_by_id(&mut connection, &id).await?;
+        let mut book = self.book_query().find_by_id(&mut connection, id).await?;
         let book_exists = book.is_some();
 
         let version = book.as_ref().map(|b| b.version());
         let book_events = self
             .book_event_query()
-            .get_events(&mut connection, &id, version)
+            .get_events(&mut connection, id, version)
             .await?;
 
         book_events.into_iter().for_each(|event| book.apply(event));
@@ -80,7 +81,7 @@ pub trait GetBookService:
         match (book_exists, &book) {
             (false, Some(book)) => self.book_modifier().create(&mut connection, book).await?,
             (true, Some(book)) => self.book_modifier().update(&mut connection, book).await?,
-            (true, None) => self.book_modifier().delete(&mut connection, &id).await?, // Not reachable
+            (true, None) => self.book_modifier().delete(&mut connection, id).await?, // Not reachable
             (false, None) => (),
         }
         connection.commit().await?;

@@ -1,8 +1,8 @@
 use destructure::Destructure;
 use error_stack::Report;
 
-use crate::entity::{BookId, Rent, UserId};
-use crate::event::{Applier, DestructEventInfo, EventInfo, EventRowFieldAttachments};
+use crate::entity::{BookId, UserId};
+use crate::event::EventRowFieldAttachments;
 use crate::KernelError;
 
 const BOOK_RENTED: &str = "book_rented";
@@ -12,21 +12,6 @@ const BOOK_RETURNED: &str = "book_returned";
 pub enum RentEvent {
     Rent { book_id: BookId, user_id: UserId },
     Return { book_id: BookId, user_id: UserId },
-}
-
-impl Applier<EventInfo<RentEvent, Rent>> for Option<Rent> {
-    fn apply(&mut self, event: EventInfo<RentEvent, Rent>) {
-        let DestructEventInfo { event, version, .. } = event.into_destruct();
-        match (self, event) {
-            (option @ None, RentEvent::Rent { book_id, user_id }) => {
-                *option = Some(Rent::new(version, book_id, user_id));
-            }
-            (option, RentEvent::Return { .. }) => {
-                *option = None;
-            }
-            _ => {}
-        }
-    }
 }
 
 #[derive(Debug, Destructure)]

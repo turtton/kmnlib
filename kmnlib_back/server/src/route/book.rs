@@ -28,7 +28,7 @@ impl BookRouter for Router<AppModule> {
                 |State(handler): State<AppModule>, Query(req): Query<GetAllRequest>| async move {
                     Controller::new(Transformer, Presenter)
                         .intake(req)
-                        .handle(|dto| handler.pgpool().get_all(dto))
+                        .handle(|dto| async move { handler.pgpool().get_all(&dto).await })
                         .await
                         .map_err(ErrorStatus::from)
                 },
@@ -49,7 +49,7 @@ impl BookRouter for Router<AppModule> {
                 |State(handler): State<AppModule>, Path(id): Path<Uuid>| async move {
                     Controller::new(Transformer, Presenter)
                         .intake(GetRequest::new(id))
-                        .handle(|dto| handler.pgpool().get_book(dto))
+                        .handle(|dto| async move { handler.pgpool().get_book(&dto).await })
                         .await
                         .map_err(ErrorStatus::from)
                         .map(|res| {

@@ -5,7 +5,7 @@ pub struct GetRentFromBookIdDto {
 }
 
 pub struct GetRentFromUserIdDto {
-    pub user_id: BookId,
+    pub user_id: UserId,
 }
 
 pub struct GetRentFromIdDto {

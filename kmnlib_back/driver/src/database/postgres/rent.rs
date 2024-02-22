@@ -13,7 +13,7 @@ use kernel::interface::update::{
     DependOnRentEventHandler, DependOnRentModifier, RentEventHandler, RentModifier,
 };
 use kernel::prelude::entity::{
-    BookId, CreatedAt, EventVersion, ExpectedEventVersion, Rent, UserId,
+    BookId, CreatedAt, EventVersion, ExpectedEventVersion, Rent, ReturnedAt, UserId,
 };
 use kernel::KernelError;
 
@@ -31,7 +31,7 @@ impl RentQuery for PostgresRentRepository {
         con: &mut PostgresTransaction,
         book_id: &BookId,
         user_id: &UserId,
-    ) -> error_stack::Result<Option<Rent>, KernelError> {
+    ) -> error_stack::Result<Vec<Rent>, KernelError> {
         PgRentInternal::find_by_id(con, book_id, user_id).await
     }
     async fn find_by_book_id(
@@ -67,6 +67,14 @@ impl RentModifier for PostgresRentRepository {
         rent: &Rent,
     ) -> error_stack::Result<(), KernelError> {
         PgRentInternal::create(con, rent).await
+    }
+
+    async fn update(
+        &self,
+        con: &mut Self::Transaction,
+        rent: &Rent,
+    ) -> error_stack::Result<(), KernelError> {
+        PgRentInternal::update(con, rent).await
     }
 
     async fn delete(
@@ -149,15 +157,39 @@ struct RentRow {
     version: i64,
     book_id: Uuid,
     user_id: Uuid,
+    returned_at: Option<OffsetDateTime>,
+    returned_version: Option<i64>,
 }
 
-impl From<RentRow> for Rent {
-    fn from(value: RentRow) -> Self {
-        Rent::new(
-            EventVersion::new(value.version),
-            BookId::new(value.book_id),
-            UserId::new(value.user_id),
-        )
+impl TryFrom<RentRow> for Rent {
+    type Error = Report<KernelError>;
+    fn try_from(
+        RentRow {
+            version,
+            book_id,
+            user_id,
+            returned_at,
+            returned_version,
+        }: RentRow,
+    ) -> Result<Self, Self::Error> {
+        let returned_at = match (returned_at, returned_version) {
+            (Some(returned_at), Some(returned_version)) => Some((
+                ReturnedAt::new(returned_at),
+                EventVersion::new(returned_version),
+            )),
+            (None, None) => None,
+            _ => {
+                return Err(Report::new(KernelError::Internal).attach_printable(format!(
+                "Invalid Rent data. version: {version}, book_id: {book_id:?}, user_id: {user_id:?}"
+            )))
+            }
+        };
+        Ok(Rent::new(
+            EventVersion::new(version),
+            BookId::new(book_id),
+            UserId::new(user_id),
+            returned_at,
+        ))
     }
 }
 
@@ -194,7 +226,7 @@ impl PgRentInternal {
         con: &mut PgConnection,
         book_id: &BookId,
         user_id: &UserId,
-    ) -> error_stack::Result<Option<Rent>, KernelError> {
+    ) -> error_stack::Result<Vec<Rent>, KernelError> {
         let row = sqlx::query_as::<_, RentRow>(
             // language=postgresql
             r#"
@@ -210,10 +242,12 @@ impl PgRentInternal {
         )
         .bind(book_id.as_ref())
         .bind(user_id.as_ref())
-        .fetch_optional(con)
+        .fetch_all(con)
         .await
         .convert_error()?;
-        Ok(row.map(Rent::from))
+        row.into_iter()
+            .map(Rent::try_from)
+            .collect::<error_stack::Result<Vec<_>, KernelError>>()
     }
 
     async fn find_by_book_id(
@@ -236,7 +270,9 @@ impl PgRentInternal {
         .fetch_all(con)
         .await
         .convert_error()?;
-        Ok(row.into_iter().map(Rent::from).collect())
+        row.into_iter()
+            .map(Rent::try_from)
+            .collect::<error_stack::Result<Vec<_>, KernelError>>()
     }
 
     async fn find_by_user_id(
@@ -259,19 +295,46 @@ impl PgRentInternal {
         .fetch_all(con)
         .await
         .convert_error()?;
-        Ok(row.into_iter().map(Rent::from).collect())
+        row.into_iter()
+            .map(Rent::try_from)
+            .collect::<error_stack::Result<_, KernelError>>()
     }
 
     async fn create(con: &mut PgConnection, rent: &Rent) -> error_stack::Result<(), KernelError> {
         sqlx::query(
             // language=postgresql
             r#"
-            INSERT INTO book_rents (book_id, user_id)
-            VALUES ($1, $2)
+            INSERT INTO book_rents (book_id, user_id, version)
+            VALUES ($1, $2, $3)
             "#,
         )
         .bind(rent.book_id().as_ref())
         .bind(rent.user_id().as_ref())
+        .bind(rent.version().as_ref())
+        .execute(con)
+        .await
+        .convert_error()?;
+        Ok(())
+    }
+
+    async fn update(con: &mut PgConnection, rent: &Rent) -> error_stack::Result<(), KernelError> {
+        let (returned_at, returned_version) = match rent.returned_at() {
+            None => (None, None),
+            Some((returned_at, returned_version)) => (Some(returned_at), Some(returned_version)),
+        };
+        sqlx::query(
+            // language=postgresql
+            r#"
+            UPDATE book_rents
+            SET returned_at = $4, returned_version = 5
+            WHERE version = $1 AND book_id = $2 AND user_id = $3
+            "#,
+        )
+        .bind(rent.version().as_ref())
+        .bind(rent.book_id().as_ref())
+        .bind(rent.user_id().as_ref())
+        .bind(returned_at.map(ReturnedAt::as_ref))
+        .bind(returned_version.map(EventVersion::as_ref))
         .execute(con)
         .await
         .convert_error()?;
@@ -509,7 +572,7 @@ mod test {
         );
         PostgresUserRepository.create(&mut con, &user).await?;
 
-        let rent = Rent::new(EventVersion::new(1), book_id.clone(), user_id.clone());
+        let rent = Rent::new(EventVersion::new(1), book_id.clone(), user_id.clone(), None);
         PostgresRentRepository.create(&mut con, &rent).await?;
 
         let find = PostgresRentRepository

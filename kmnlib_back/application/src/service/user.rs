@@ -60,18 +60,19 @@ pub trait GetUserService:
 
         Ok(users)
     }
-    async fn get_user(&self, dto: GetUserDto) -> error_stack::Result<Option<User>, KernelError> {
+    async fn get_user(
+        &self,
+        GetUserDto { id }: &GetUserDto,
+    ) -> error_stack::Result<Option<User>, KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
-        let id = dto.id;
-        let id = UserId::new(id);
-        let mut user = self.user_query().find_by_id(&mut connection, &id).await?;
+        let mut user = self.user_query().find_by_id(&mut connection, id).await?;
         let user_exists = user.is_some();
 
         let version = user.as_ref().map(|u| u.version());
         let user_events = self
             .user_event_query()
-            .get_events(&mut connection, &id, version)
+            .get_events(&mut connection, id, version)
             .await?;
 
         user_events.into_iter().for_each(|event| {
@@ -81,7 +82,7 @@ pub trait GetUserService:
         match (user_exists, &user) {
             (false, Some(user)) => self.user_modifier().create(&mut connection, user).await?,
             (true, Some(user)) => self.user_modifier().update(&mut connection, user).await?,
-            (true, None) => self.user_modifier().delete(&mut connection, &id).await?, // Not reachable
+            (true, None) => self.user_modifier().delete(&mut connection, id).await?, // Not reachable
             (false, None) => (),
         }
         connection.commit().await?;

@@ -40,9 +40,11 @@ CREATE TABLE IF NOT EXISTS book_events
 
 CREATE TABLE IF NOT EXISTS book_rents
 (
-    version BIGSERIAL NOT NULL,
-    book_id UUID      NOT NULL,
-    user_id UUID      NOT NULL,
+    version          BIGSERIAL NOT NULL,
+    book_id          UUID      NOT NULL,
+    user_id          UUID      NOT NULL,
+    returned_at      TIMESTAMPTZ,
+    returned_version BIGINT,
     PRIMARY KEY (version, book_id, user_id),
     FOREIGN KEY (book_id) REFERENCES books (id),
     FOREIGN KEY (user_id) REFERENCES users (id)

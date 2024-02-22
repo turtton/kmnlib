@@ -225,14 +225,15 @@ impl PgUserInternal {
         sqlx::query(
             // language=postgresql
             r#"
-            INSERT INTO users (id, name, rent_limit, version)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO users (id, name, rent_limit, version, is_deleted)
+            VALUES ($1, $2, $3, $4, $5)
             "#,
         )
         .bind(user.id().as_ref())
         .bind(user.name().as_ref())
         .bind(user.rent_limit().as_ref())
         .bind(user.version().as_ref())
+        .bind(user.is_deleted().as_ref())
         .execute(con)
         .await
         .convert_error()?;
@@ -244,13 +245,14 @@ impl PgUserInternal {
         sqlx::query(
             r#"
             UPDATE users
-            SET name = $2, version = $3
+            SET name = $2, version = $3, is_deleted = $4
             WHERE id = $1
             "#,
         )
         .bind(user.id().as_ref())
         .bind(user.name().as_ref())
         .bind(user.version().as_ref())
+        .bind(user.is_deleted().as_ref())
         .execute(con)
         .await
         .convert_error()?;

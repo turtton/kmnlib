@@ -231,14 +231,15 @@ impl PgBookInternal {
         // language=postgresql
         sqlx::query(
             r#"
-            INSERT INTO books (id, title, amount, version)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO books (id, title, amount, version, is_deleted)
+            VALUES ($1, $2, $3, $4, $5)
             "#,
         )
         .bind(book.id().as_ref())
         .bind(book.title().as_ref())
         .bind(book.amount().as_ref())
         .bind(book.version().as_ref())
+        .bind(book.is_deleted().as_ref())
         .execute(con)
         .await
         .map_err(|e| match e {
@@ -253,7 +254,7 @@ impl PgBookInternal {
         sqlx::query(
             r#"
             UPDATE books
-            SET title = $2, amount = $3, version = $4
+            SET title = $2, amount = $3, version = $4, is_deleted = $5
             WHERE id = $1
             "#,
         )
@@ -261,6 +262,7 @@ impl PgBookInternal {
         .bind(book.title().as_ref())
         .bind(book.amount().as_ref())
         .bind(book.version().as_ref())
+        .bind(book.is_deleted().as_ref())
         .execute(con)
         .await
         .convert_error()?;

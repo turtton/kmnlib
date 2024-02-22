@@ -12,7 +12,10 @@ use kernel::interface::query::{
 use kernel::interface::update::{
     DependOnUserEventHandler, DependOnUserModifier, UserEventHandler, UserModifier,
 };
-use kernel::prelude::entity::{CreatedAt, EventVersion, ExpectedEventVersion, IsDeleted, User, UserId, UserName, UserRentLimit};
+use kernel::prelude::entity::{
+    CreatedAt, EventVersion, ExpectedEventVersion, IsDeleted, SelectLimit, SelectOffset, User,
+    UserId, UserName, UserRentLimit,
+};
 use kernel::KernelError;
 
 use crate::database::postgres::PostgresTransaction;
@@ -24,6 +27,16 @@ pub struct PostgresUserRepository;
 #[async_trait::async_trait]
 impl UserQuery for PostgresUserRepository {
     type Transaction = PostgresTransaction;
+
+    async fn get_all(
+        &self,
+        con: &mut Self::Transaction,
+        limit: &SelectLimit,
+        offset: &SelectOffset,
+    ) -> error_stack::Result<Vec<User>, KernelError> {
+        PgUserInternal::get_all(con, limit, offset).await
+    }
+
     async fn find_by_id(
         &self,
         con: &mut PostgresTransaction,
@@ -120,7 +133,7 @@ struct UserRow {
     name: String,
     rent_limit: i32,
     version: i64,
-    is_deleted: bool
+    is_deleted: bool,
 }
 
 impl From<UserRow> for User {
@@ -130,7 +143,7 @@ impl From<UserRow> for User {
             UserName::new(row.name),
             UserRentLimit::new(row.rent_limit),
             EventVersion::new(row.version),
-            IsDeleted::new(row.is_deleted)
+            IsDeleted::new(row.is_deleted),
         )
     }
 }
@@ -166,6 +179,28 @@ impl TryFrom<UserEventRowColumn> for EventInfo<UserEvent, User> {
 pub(in crate::database) struct PgUserInternal;
 
 impl PgUserInternal {
+    async fn get_all(
+        con: &mut PgConnection,
+        limit: &SelectLimit,
+        offset: &SelectOffset,
+    ) -> error_stack::Result<Vec<User>, KernelError> {
+        sqlx::query_as::<_, UserRow>(
+            //language=postgresql
+            r#"
+            SELECT id, name, rent_limit, version
+            FROM users
+            ORDER BY id
+            LIMIT $1
+            OFFSET $2
+            "#,
+        )
+        .bind(limit.as_ref())
+        .bind(offset.as_ref())
+        .fetch_all(con)
+        .await
+        .convert_error()
+        .map(|vec| vec.into_iter().map(User::from).collect())
+    }
     async fn find_by_id(
         con: &mut PgConnection,
         id: &UserId,

@@ -1,11 +1,18 @@
 use crate::database::{DatabaseConnection, DependOnDatabaseConnection, Transaction};
-use crate::entity::{EventVersion, User, UserId};
+use crate::entity::{EventVersion, SelectLimit, SelectOffset, User, UserId};
 use crate::event::{EventInfo, UserEvent};
 use crate::KernelError;
 
 #[async_trait::async_trait]
 pub trait UserQuery: Sync + Send + 'static {
     type Transaction: Transaction;
+    async fn get_all(
+        &self,
+        con: &mut Self::Transaction,
+        limit: &SelectLimit,
+        offset: &SelectOffset,
+    ) -> error_stack::Result<Vec<User>, KernelError>;
+
     async fn find_by_id(
         &self,
         con: &mut Self::Transaction,

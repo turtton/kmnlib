@@ -9,16 +9,14 @@ use kernel::interface::update::{
 use kernel::prelude::entity::{User, UserId};
 use kernel::KernelError;
 
-use crate::transfer::GetUserDto;
+use crate::transfer::{GetAllUserDto, GetUserDto};
 
 #[async_trait::async_trait]
 pub trait HandleUserService: 'static + Sync + Send + DependOnUserEventHandler {
-    async fn handle_command(
-        &self,
-        command: CommandInfo<UserEvent, User>,
-    ) -> error_stack::Result<UserId, KernelError> {
+    async fn handle_event(&self, event: UserEvent) -> error_stack::Result<UserId, KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
+        let command = CommandInfo::new(event, None);
         let id = self
             .user_event_handler()
             .handle(&mut connection, command)
@@ -30,14 +28,39 @@ pub trait HandleUserService: 'static + Sync + Send + DependOnUserEventHandler {
     }
 }
 
+impl<T> HandleUserService for T where T: DependOnUserEventHandler {}
+
 #[async_trait::async_trait]
 pub trait GetUserService:
     'static + Sync + Send + DependOnUserQuery + DependOnUserModifier + DependOnUserEventQuery
 {
-    async fn get_user(
-        &mut self,
-        dto: GetUserDto,
-    ) -> error_stack::Result<Option<User>, KernelError> {
+    async fn get_all(
+        &self,
+        GetAllUserDto { limit, offset }: GetAllUserDto,
+    ) -> error_stack::Result<Vec<User>, KernelError> {
+        let mut connection = self.database_connection().transact().await?;
+
+        let mut users = self
+            .user_query()
+            .get_all(&mut connection, &limit, &offset)
+            .await?;
+
+        for user in &mut users {
+            let events = self
+                .user_event_query()
+                .get_events(&mut connection, user.id(), Some(user.version()))
+                .await?;
+            if !events.is_empty() {
+                events.into_iter().for_each(|e| user.apply(e));
+                self.user_modifier().update(&mut connection, user).await?;
+            }
+        }
+
+        connection.commit().await?;
+
+        Ok(users)
+    }
+    async fn get_user(&self, dto: GetUserDto) -> error_stack::Result<Option<User>, KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
         let id = dto.id;
@@ -58,7 +81,7 @@ pub trait GetUserService:
         match (user_exists, &user) {
             (false, Some(user)) => self.user_modifier().create(&mut connection, user).await?,
             (true, Some(user)) => self.user_modifier().update(&mut connection, user).await?,
-            (true, None) => self.user_modifier().delete(&mut connection, &id).await?,
+            (true, None) => self.user_modifier().delete(&mut connection, &id).await?, // Not reachable
             (false, None) => (),
         }
         connection.commit().await?;

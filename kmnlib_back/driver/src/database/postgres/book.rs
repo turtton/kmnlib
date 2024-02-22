@@ -1,5 +1,5 @@
 use error_stack::Report;
-use sqlx::PgConnection;
+use sqlx::{Error, PgConnection};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -14,6 +14,7 @@ use kernel::interface::update::{
 };
 use kernel::prelude::entity::{
     Book, BookAmount, BookId, BookTitle, CreatedAt, EventVersion, ExpectedEventVersion,
+    SelectLimit, SelectOffset,
 };
 use kernel::KernelError;
 
@@ -26,6 +27,16 @@ pub struct PostgresBookRepository;
 #[async_trait::async_trait]
 impl BookQuery for PostgresBookRepository {
     type Transaction = PostgresTransaction;
+
+    async fn get_all(
+        &self,
+        con: &mut Self::Transaction,
+        limit: &SelectLimit,
+        offset: &SelectOffset,
+    ) -> error_stack::Result<Vec<Book>, KernelError> {
+        PgBookInternal::get_all(con, limit, offset).await
+    }
+
     async fn find_by_id(
         &self,
         con: &mut PostgresTransaction,
@@ -166,6 +177,31 @@ impl TryFrom<BookEventRowColumn> for EventInfo<BookEvent, Book> {
 pub(in crate::database) struct PgBookInternal;
 
 impl PgBookInternal {
+    async fn get_all(
+        con: &mut PgConnection,
+        limit: &SelectLimit,
+        offset: &SelectOffset,
+    ) -> error_stack::Result<Vec<Book>, KernelError> {
+        sqlx::query_as::<_, BookRow>(
+            // language=postgresql
+            r#"
+            SELECT id, title, amount, version
+            FROM books
+            ORDER BY id
+            LIMIT $1
+            OFFSET $2
+            "#,
+        )
+        .bind(limit.as_ref())
+        .bind(offset.as_ref())
+        .fetch_all(con)
+        .await
+        .map_err(|e| match e {
+            Error::PoolTimedOut => Report::from(e).change_context(KernelError::Timeout),
+            _ => Report::from(e).change_context(KernelError::Internal),
+        })
+        .map(|vec| vec.into_iter().map(Book::from).collect())
+    }
     async fn find_by_id(
         con: &mut PgConnection,
         id: &BookId,

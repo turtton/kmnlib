@@ -1,7 +1,7 @@
 use crate::controller::Intake;
-use application::transfer::GetBookDto;
+use application::transfer::{GetAllBookDto, GetBookDto};
 use kernel::interface::event::BookEvent;
-use kernel::prelude::entity::{BookAmount, BookId, BookTitle};
+use kernel::prelude::entity::{BookAmount, BookId, BookTitle, SelectLimit, SelectOffset};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -26,6 +26,14 @@ impl DeleteRequest {
     pub fn new(id: Uuid) -> Self {
         Self { id }
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GetAllRequest {
+    #[serde(default)]
+    limit: SelectLimit,
+    #[serde(default)]
+    offset: SelectOffset,
 }
 
 #[derive(Debug)]
@@ -78,6 +86,16 @@ impl Intake<GetRequest> for Transformer {
     fn emit(&self, input: GetRequest) -> Self::To {
         GetBookDto {
             id: BookId::new(input.id),
+        }
+    }
+}
+
+impl Intake<GetAllRequest> for Transformer {
+    type To = GetAllBookDto;
+    fn emit(&self, input: GetAllRequest) -> Self::To {
+        GetAllBookDto {
+            limit: input.limit,
+            offset: input.offset,
         }
     }
 }

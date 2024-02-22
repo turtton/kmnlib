@@ -1,11 +1,17 @@
 use crate::database::{DatabaseConnection, DependOnDatabaseConnection, Transaction};
-use crate::entity::{Book, BookId, EventVersion};
+use crate::entity::{Book, BookId, EventVersion, SelectLimit, SelectOffset};
 use crate::event::{BookEvent, EventInfo};
 use crate::KernelError;
 
 #[async_trait::async_trait]
 pub trait BookQuery: Sync + Send + 'static {
     type Transaction: Transaction;
+    async fn get_all(
+        &self,
+        con: &mut Self::Transaction,
+        limit: &SelectLimit,
+        offset: &SelectOffset,
+    ) -> error_stack::Result<Vec<Book>, KernelError>;
     async fn find_by_id(
         &self,
         con: &mut Self::Transaction,

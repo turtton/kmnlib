@@ -5,14 +5,14 @@ use crate::controller::Controller;
 use crate::error::ErrorStatus;
 use crate::handler::AppModule;
 use crate::route::book::request::{
-    CreateRequest, DeleteRequest, GetRequest, Transformer, UpdateRequest,
+    CreateRequest, DeleteRequest, GetAllRequest, GetRequest, Transformer, UpdateRequest,
 };
 use crate::route::book::response::{BookResponse, Presenter};
 use application::service::{GetBookService, HandleBookService};
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::routing::{get, post};
+use axum::routing::get;
 use axum::{Json, Router};
 use uuid::Uuid;
 
@@ -24,16 +24,24 @@ impl BookRouter for Router<AppModule> {
     fn route_book(self) -> Self {
         self.route(
             "/books",
-            post(
-                |state: State<AppModule>, json: Json<CreateRequest>| async move {
+            get(
+                |State(handler): State<AppModule>, Path(req): Path<GetAllRequest>| async move {
                     Controller::new(Transformer, Presenter)
-                        .intake(json.0)
-                        .handle(|event| state.0.pgpool().handle_event(event))
+                        .intake(req)
+                        .handle(|dto| handler.pgpool().get_all(dto))
                         .await
                         .map_err(ErrorStatus::from)
                 },
             )
-            .get(|state: State<AppModule>| async move { todo!() }),
+            .post(
+                |State(handler): State<AppModule>, Json(req): Json<CreateRequest>| async move {
+                    Controller::new(Transformer, Presenter)
+                        .intake(req)
+                        .handle(|event| handler.pgpool().handle_event(event))
+                        .await
+                        .map_err(ErrorStatus::from)
+                },
+            ),
         )
         .route(
             "/books/:id",

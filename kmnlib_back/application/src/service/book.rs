@@ -9,7 +9,7 @@ use kernel::interface::update::{
 use kernel::prelude::entity::{Book, BookId};
 use kernel::KernelError;
 
-use crate::transfer::GetBookDto;
+use crate::transfer::{GetAllBookDto, GetBookDto};
 
 #[async_trait::async_trait]
 pub trait HandleBookService: 'static + Sync + Send + DependOnBookEventHandler {
@@ -34,6 +34,41 @@ impl<T> HandleBookService for T where T: DependOnBookEventHandler {}
 pub trait GetBookService:
     'static + Sync + Send + DependOnBookQuery + DependOnBookModifier + DependOnBookEventQuery
 {
+    async fn get_all(
+        &self,
+        GetAllBookDto { limit, offset }: GetAllBookDto,
+    ) -> error_stack::Result<Vec<Book>, KernelError> {
+        let mut connection = self.database_connection().transact().await?;
+
+        let books = self
+            .book_query()
+            .get_all(&mut connection, &limit, &offset)
+            .await?;
+
+        let mut result = Vec::new();
+        for book in books {
+            // TODO: Add is_deleted in entity to applier implement for Book and delete this clone.
+            let id = book.id().clone();
+            let events = self
+                .book_event_query()
+                .get_events(&mut connection, &id, Some(book.version()))
+                .await?;
+            let mut book = Some(book);
+            events.into_iter().for_each(|e| book.apply(e));
+            match book {
+                None => self.book_modifier().delete(&mut connection, &id).await?,
+                Some(book) => {
+                    self.book_modifier().update(&mut connection, &book).await?;
+                    result.push(book)
+                }
+            }
+        }
+
+        connection.commit().await?;
+
+        Ok(result)
+    }
+
     async fn get_book(&self, dto: GetBookDto) -> error_stack::Result<Option<Book>, KernelError> {
         let mut connection = self.database_connection().transact().await?;
 

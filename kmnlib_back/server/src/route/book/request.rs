@@ -28,6 +28,7 @@ impl DeleteRequest {
     }
 }
 
+// I want to use primitive type(i32) in these fields, but default attribute not supported for literals(https://github.com/serde-rs/serde/issues/368)
 #[derive(Debug, Deserialize)]
 pub struct GetAllRequest {
     #[serde(default)]

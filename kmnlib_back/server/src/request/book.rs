@@ -6,23 +6,23 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
-pub struct CreateRequest {
+pub struct CreateBookRequest {
     title: String,
     amount: i32,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct UpdateRequest {
+pub struct UpdateBookRequest {
     title: Option<String>,
     amount: Option<i32>,
 }
 
 #[derive(Debug)]
-pub struct DeleteRequest {
+pub struct DeleteBookRequest {
     id: Uuid,
 }
 
-impl DeleteRequest {
+impl DeleteBookRequest {
     pub fn new(id: Uuid) -> Self {
         Self { id }
     }
@@ -30,7 +30,7 @@ impl DeleteRequest {
 
 // I want to use primitive type(i32) in these fields, but default attribute not supported for literals(https://github.com/serde-rs/serde/issues/368)
 #[derive(Debug, Deserialize)]
-pub struct GetAllRequest {
+pub struct GetAllBookRequest {
     #[serde(default)]
     limit: SelectLimit,
     #[serde(default)]
@@ -38,21 +38,21 @@ pub struct GetAllRequest {
 }
 
 #[derive(Debug)]
-pub struct GetRequest {
+pub struct GetBookRequest {
     id: Uuid,
 }
 
-impl GetRequest {
+impl GetBookRequest {
     pub fn new(id: Uuid) -> Self {
         Self { id }
     }
 }
 
-pub struct Transformer;
+pub struct BookTransformer;
 
-impl Intake<CreateRequest> for Transformer {
+impl Intake<CreateBookRequest> for BookTransformer {
     type To = BookEvent;
-    fn emit(&self, input: CreateRequest) -> Self::To {
+    fn emit(&self, input: CreateBookRequest) -> Self::To {
         Self::To::Create {
             id: BookId::new(Uuid::new_v4()),
             title: BookTitle::new(input.title),
@@ -61,9 +61,9 @@ impl Intake<CreateRequest> for Transformer {
     }
 }
 
-impl Intake<(Uuid, UpdateRequest)> for Transformer {
+impl Intake<(Uuid, UpdateBookRequest)> for BookTransformer {
     type To = BookEvent;
-    fn emit(&self, input: (Uuid, UpdateRequest)) -> Self::To {
+    fn emit(&self, input: (Uuid, UpdateBookRequest)) -> Self::To {
         let (id, input) = input;
         Self::To::Update {
             id: BookId::new(id),
@@ -73,27 +73,27 @@ impl Intake<(Uuid, UpdateRequest)> for Transformer {
     }
 }
 
-impl Intake<DeleteRequest> for Transformer {
+impl Intake<DeleteBookRequest> for BookTransformer {
     type To = BookEvent;
-    fn emit(&self, input: DeleteRequest) -> Self::To {
+    fn emit(&self, input: DeleteBookRequest) -> Self::To {
         Self::To::Delete {
             id: BookId::new(input.id),
         }
     }
 }
 
-impl Intake<GetRequest> for Transformer {
+impl Intake<GetBookRequest> for BookTransformer {
     type To = GetBookDto;
-    fn emit(&self, input: GetRequest) -> Self::To {
+    fn emit(&self, input: GetBookRequest) -> Self::To {
         GetBookDto {
             id: BookId::new(input.id),
         }
     }
 }
 
-impl Intake<GetAllRequest> for Transformer {
+impl Intake<GetAllBookRequest> for BookTransformer {
     type To = GetAllBookDto;
-    fn emit(&self, input: GetAllRequest) -> Self::To {
+    fn emit(&self, input: GetAllBookRequest) -> Self::To {
         GetAllBookDto {
             limit: input.limit,
             offset: input.offset,

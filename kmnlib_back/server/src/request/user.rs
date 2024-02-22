@@ -6,30 +6,30 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
-pub struct CreateRequest {
+pub struct CreateUserRequest {
     name: String,
     rent_limit: i32,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct UpdateRequest {
+pub struct UpdateUserRequest {
     name: Option<String>,
     rent_limit: Option<i32>,
 }
 
 #[derive(Debug)]
-pub struct DeleteRequest {
+pub struct DeleteUserRequest {
     id: Uuid,
 }
 
-impl DeleteRequest {
+impl DeleteUserRequest {
     pub fn new(id: Uuid) -> Self {
         Self { id }
     }
 }
 
 #[derive(Debug, Deserialize)]
-pub struct GetAllRequest {
+pub struct GetAllUserRequest {
     #[serde(default)]
     limit: SelectLimit,
     #[serde(default)]
@@ -37,21 +37,21 @@ pub struct GetAllRequest {
 }
 
 #[derive(Debug)]
-pub struct GetRequest {
+pub struct GetUserRequest {
     id: Uuid,
 }
 
-impl GetRequest {
+impl GetUserRequest {
     pub fn new(id: Uuid) -> Self {
         Self { id }
     }
 }
 
-pub struct Transformer;
+pub struct UserTransformer;
 
-impl Intake<CreateRequest> for Transformer {
+impl Intake<CreateUserRequest> for UserTransformer {
     type To = UserEvent;
-    fn emit(&self, input: CreateRequest) -> Self::To {
+    fn emit(&self, input: CreateUserRequest) -> Self::To {
         Self::To::Create {
             id: UserId::new(Uuid::new_v4()),
             name: UserName::new(input.name),
@@ -60,9 +60,9 @@ impl Intake<CreateRequest> for Transformer {
     }
 }
 
-impl Intake<(Uuid, UpdateRequest)> for Transformer {
+impl Intake<(Uuid, UpdateUserRequest)> for UserTransformer {
     type To = UserEvent;
-    fn emit(&self, (id, req): (Uuid, UpdateRequest)) -> Self::To {
+    fn emit(&self, (id, req): (Uuid, UpdateUserRequest)) -> Self::To {
         Self::To::Update {
             id: UserId::new(id),
             name: req.name.map(UserName::new),
@@ -71,27 +71,27 @@ impl Intake<(Uuid, UpdateRequest)> for Transformer {
     }
 }
 
-impl Intake<DeleteRequest> for Transformer {
+impl Intake<DeleteUserRequest> for UserTransformer {
     type To = UserEvent;
-    fn emit(&self, input: DeleteRequest) -> Self::To {
+    fn emit(&self, input: DeleteUserRequest) -> Self::To {
         Self::To::Delete {
             id: UserId::new(input.id),
         }
     }
 }
 
-impl Intake<GetRequest> for Transformer {
+impl Intake<GetUserRequest> for UserTransformer {
     type To = GetUserDto;
-    fn emit(&self, input: GetRequest) -> Self::To {
+    fn emit(&self, input: GetUserRequest) -> Self::To {
         GetUserDto {
             id: UserId::new(input.id),
         }
     }
 }
 
-impl Intake<GetAllRequest> for Transformer {
+impl Intake<GetAllUserRequest> for UserTransformer {
     type To = GetAllUserDto;
-    fn emit(&self, input: GetAllRequest) -> Self::To {
+    fn emit(&self, input: GetAllUserRequest) -> Self::To {
         GetAllUserDto {
             limit: input.limit,
             offset: input.offset,

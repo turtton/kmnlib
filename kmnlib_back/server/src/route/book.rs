@@ -1,14 +1,12 @@
-mod request;
-mod response;
-
 use crate::controller::Controller;
 use crate::error::ErrorStatus;
 use crate::handler::AppModule;
-use crate::route::book::request::{
-    CreateRequest, DeleteRequest, GetAllRequest, GetRequest, Transformer, UpdateRequest,
+use crate::request::{
+    BookTransformer, CreateBookRequest, DeleteBookRequest, GetAllBookRequest, GetBookRequest,
+    GetRentsRequest, UpdateBookRequest,
 };
-use crate::route::book::response::{BookResponse, Presenter};
-use application::service::{GetBookService, HandleBookService};
+use crate::response::{BookPresenter, BookResponse, RentPresenter};
+use application::service::{GetBookService, GetRentService, HandleBookService};
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
@@ -25,8 +23,8 @@ impl BookRouter for Router<AppModule> {
         self.route(
             "/books",
             get(
-                |State(handler): State<AppModule>, Query(req): Query<GetAllRequest>| async move {
-                    Controller::new(Transformer, Presenter)
+                |State(handler): State<AppModule>, Query(req): Query<GetAllBookRequest>| async move {
+                    Controller::new(BookTransformer, BookPresenter)
                         .intake(req)
                         .handle(|dto| async move { handler.pgpool().get_all(&dto).await })
                         .await
@@ -34,8 +32,8 @@ impl BookRouter for Router<AppModule> {
                 },
             )
             .post(
-                |State(handler): State<AppModule>, Json(req): Json<CreateRequest>| async move {
-                    Controller::new(Transformer, Presenter)
+                |State(handler): State<AppModule>, Json(req): Json<CreateBookRequest>| async move {
+                    Controller::new(BookTransformer, BookPresenter)
                         .intake(req)
                         .handle(|event| handler.pgpool().handle_event(event))
                         .await
@@ -47,8 +45,8 @@ impl BookRouter for Router<AppModule> {
             "/books/:id",
             get(
                 |State(handler): State<AppModule>, Path(id): Path<Uuid>| async move {
-                    Controller::new(Transformer, Presenter)
-                        .intake(GetRequest::new(id))
+                    Controller::new(BookTransformer, BookPresenter)
+                        .intake(GetBookRequest::new(id))
                         .handle(|dto| async move { handler.pgpool().get_book(&dto).await })
                         .await
                         .map_err(ErrorStatus::from)
@@ -61,8 +59,8 @@ impl BookRouter for Router<AppModule> {
             .patch(
                 |State(handler): State<AppModule>,
                  Path(id): Path<Uuid>,
-                 Json(req): Json<UpdateRequest>| async move {
-                    Controller::new(Transformer, Presenter)
+                 Json(req): Json<UpdateBookRequest>| async move {
+                    Controller::new(BookTransformer, BookPresenter)
                         .intake((id, req))
                         .handle(|event| handler.pgpool().handle_event(event))
                         .await
@@ -71,9 +69,23 @@ impl BookRouter for Router<AppModule> {
             )
             .delete(
                 |State(handler): State<AppModule>, Path(id): Path<Uuid>| async move {
-                    Controller::new(Transformer, Presenter)
-                        .intake(DeleteRequest::new(id))
+                    Controller::new(BookTransformer, BookPresenter)
+                        .intake(DeleteBookRequest::new(id))
                         .handle(|command| handler.pgpool().handle_event(command))
+                        .await
+                        .map_err(ErrorStatus::from)
+                },
+            ),
+        )
+        .route(
+            "/books/:id/rents",
+            get(
+                |State(handler): State<AppModule>, Path(id): Path<Uuid>| async move {
+                    Controller::new(BookTransformer, RentPresenter)
+                        .intake(GetRentsRequest::new(id))
+                        .handle(
+                            |dto| async move { handler.pgpool().get_rent_from_book(&dto).await },
+                        )
                         .await
                         .map_err(ErrorStatus::from)
                 },

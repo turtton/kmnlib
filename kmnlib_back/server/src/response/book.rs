@@ -4,11 +4,11 @@ use kernel::prelude::entity::{Book, BookAmount, BookId, BookTitle, DestructBook}
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
-pub struct CreatedResponse {
+pub struct CreatedBookResponse {
     id: BookId,
 }
 
-impl IntoResponse for CreatedResponse {
+impl IntoResponse for CreatedBookResponse {
     fn into_response(self) -> Response {
         (axum::http::StatusCode::CREATED, axum::Json(self)).into_response()
     }
@@ -27,16 +27,16 @@ impl IntoResponse for BookResponse {
     }
 }
 
-pub struct Presenter;
+pub struct BookPresenter;
 
-impl Exhaust<BookId> for Presenter {
-    type To = CreatedResponse;
+impl Exhaust<BookId> for BookPresenter {
+    type To = CreatedBookResponse;
     fn emit(&self, input: BookId) -> Self::To {
-        CreatedResponse { id: input }
+        CreatedBookResponse { id: input }
     }
 }
 
-impl Exhaust<Option<Book>> for Presenter {
+impl Exhaust<Option<Book>> for BookPresenter {
     type To = Option<BookResponse>;
     fn emit(&self, input: Option<Book>) -> Self::To {
         input.map(|input| {
@@ -48,7 +48,7 @@ impl Exhaust<Option<Book>> for Presenter {
     }
 }
 
-impl Exhaust<Vec<Book>> for Presenter {
+impl Exhaust<Vec<Book>> for BookPresenter {
     type To = axum::Json<Vec<BookResponse>>;
     fn emit(&self, input: Vec<Book>) -> Self::To {
         let result = input

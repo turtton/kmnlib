@@ -1,11 +1,8 @@
-mod request;
-mod response;
-
 use crate::controller::Controller;
 use crate::error::ErrorStatus;
 use crate::handler::AppModule;
-use crate::route::rent::request::{RentRequest, ReturnRequest, Transformer};
-use crate::route::rent::response::Presenter;
+use crate::request::{RentRequest, RentTransformer, ReturnRequest};
+use crate::response::RentPresenter;
 use application::service::HandleRentService;
 use axum::extract::{Query, State};
 use axum::routing::post;
@@ -21,7 +18,7 @@ impl RentRouter for Router<AppModule> {
             "/rents",
             post(
                 |State(handler): State<AppModule>, Query(req): Query<RentRequest>| async move {
-                    Controller::new(Transformer, Presenter)
+                    Controller::new(RentTransformer, RentPresenter)
                         .intake(req)
                         .handle(|event| handler.pgpool().handle_event(event))
                         .await
@@ -30,7 +27,7 @@ impl RentRouter for Router<AppModule> {
             )
             .delete(
                 |State(handler): State<AppModule>, Query(req): Query<ReturnRequest>| async move {
-                    Controller::new(Transformer, Presenter)
+                    Controller::new(RentTransformer, RentPresenter)
                         .intake(req)
                         .handle(|event| handler.pgpool().handle_event(event))
                         .await

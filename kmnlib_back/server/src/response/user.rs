@@ -5,11 +5,11 @@ use kernel::prelude::entity::{DestructUser, User, UserId, UserName, UserRentLimi
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
-pub struct CreatedResponse {
+pub struct CreatedUserResponse {
     id: UserId,
 }
 
-impl IntoResponse for CreatedResponse {
+impl IntoResponse for CreatedUserResponse {
     fn into_response(self) -> Response {
         (StatusCode::CREATED, axum::Json(self)).into_response()
     }
@@ -28,16 +28,16 @@ impl IntoResponse for UserResponse {
     }
 }
 
-pub struct Presenter;
+pub struct UserPresenter;
 
-impl Exhaust<UserId> for Presenter {
-    type To = CreatedResponse;
+impl Exhaust<UserId> for UserPresenter {
+    type To = CreatedUserResponse;
     fn emit(&self, input: UserId) -> Self::To {
-        CreatedResponse { id: input }
+        CreatedUserResponse { id: input }
     }
 }
 
-impl Exhaust<Option<User>> for Presenter {
+impl Exhaust<Option<User>> for UserPresenter {
     type To = Option<UserResponse>;
     fn emit(&self, input: Option<User>) -> Self::To {
         input.map(|input| {
@@ -56,7 +56,7 @@ impl Exhaust<Option<User>> for Presenter {
     }
 }
 
-impl Exhaust<Vec<User>> for Presenter {
+impl Exhaust<Vec<User>> for UserPresenter {
     type To = axum::Json<Vec<UserResponse>>;
     fn emit(&self, input: Vec<User>) -> Self::To {
         let result = input

@@ -2,7 +2,7 @@ mod request;
 mod response;
 
 use crate::controller::Controller;
-use crate::error::ReturnableError;
+use crate::error::ErrorStatus;
 use crate::handler::AppModule;
 use crate::route::book::request::{
     CreateRequest, DeleteRequest, GetRequest, Transformer, UpdateRequest,
@@ -30,7 +30,7 @@ impl BookRouter for Router<AppModule> {
                         .intake(json.0)
                         .handle(|event| state.0.pgpool().handle_event(event))
                         .await
-                        .map_err(ReturnableError::from)
+                        .map_err(ErrorStatus::from)
                 },
             )
             .get(|state: State<AppModule>| async move { todo!() }),
@@ -43,7 +43,7 @@ impl BookRouter for Router<AppModule> {
                         .intake(GetRequest::new(id))
                         .handle(|dto| handler.pgpool().get_book(dto))
                         .await
-                        .map_err(ReturnableError::from)
+                        .map_err(ErrorStatus::from)
                         .map(|res| {
                             res.map(BookResponse::into_response)
                                 .unwrap_or_else(|| StatusCode::NOT_FOUND.into_response())
@@ -58,7 +58,7 @@ impl BookRouter for Router<AppModule> {
                         .intake((id, req))
                         .handle(|event| handler.pgpool().handle_event(event))
                         .await
-                        .map_err(ReturnableError::from)
+                        .map_err(ErrorStatus::from)
                 },
             )
             .delete(
@@ -67,7 +67,7 @@ impl BookRouter for Router<AppModule> {
                         .intake(DeleteRequest::new(id))
                         .handle(|command| handler.pgpool().handle_event(command))
                         .await
-                        .map_err(ReturnableError::from)
+                        .map_err(ErrorStatus::from)
                 },
             ),
         )

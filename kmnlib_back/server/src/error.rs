@@ -20,15 +20,15 @@ impl Termination for StackTrace {
 }
 
 #[derive(Debug)]
-pub struct ReturnableError(Report<KernelError>);
+pub struct ErrorStatus(Report<KernelError>);
 
-impl From<Report<KernelError>> for ReturnableError {
+impl From<Report<KernelError>> for ErrorStatus {
     fn from(e: Report<KernelError>) -> Self {
-        ReturnableError(e)
+        ErrorStatus(e)
     }
 }
 
-impl IntoResponse for ReturnableError {
+impl IntoResponse for ErrorStatus {
     fn into_response(self) -> axum::response::Response {
         match self.0.current_context() {
             KernelError::Concurrency => StatusCode::CONFLICT,

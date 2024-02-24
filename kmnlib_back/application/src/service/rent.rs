@@ -115,7 +115,7 @@ pub trait HandleRentService:
                                     rent.version().as_ref() + 1,
                                 ));
                                 CommandInfo::new(
-                                    RentEvent::Rent {
+                                    RentEvent::Return {
                                         book_id: dto.book_id,
                                         user_id: dto.user_id,
                                     },

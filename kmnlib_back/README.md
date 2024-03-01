@@ -6,7 +6,7 @@ This project is a playground to compare with [architectured](https://github.com/
 
 # Architecture
 
-CQRS + Event Sourcing + Partial Clean Architecture + Minimal Cake Pattern + Actor Model
+CQRS + Event Sourcing + Partial Clean Architecture + Minimal Cake Pattern + JobQueue
 
 # Structure
 
@@ -87,4 +87,9 @@ PostgreSQL
 
 ```shell
 podman run --rm --name kmnlib-postgres -v ./migrations/20231125184100_init.sql:/docker-entrypoint-initdb.d/postgre.sql -e POSTGRES_PASSWORD=develop -p 5432:5432 docker.io/postgres
+```
+
+Redis
+```shell
+podman run --rm --name kmnlib-redis -p 6379:6379 docker.io/redis
 ```

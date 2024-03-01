@@ -578,7 +578,7 @@ mod test {
         let find = PostgresRentRepository
             .find_by_id(&mut con, &book_id, &user_id)
             .await?;
-        assert_eq!(find, Some(rent.clone()));
+        assert_eq!(find.get(0), Some(&rent));
 
         PostgresRentRepository
             .delete(&mut con, &book_id, &user_id)
@@ -587,7 +587,7 @@ mod test {
         let find = PostgresRentRepository
             .find_by_id(&mut con, &book_id, &user_id)
             .await?;
-        assert!(find.is_none());
+        assert!(find.is_empty());
         Ok(())
     }
 

@@ -23,6 +23,6 @@ where
 
 #[async_trait::async_trait]
 pub trait Transaction: 'static + Sync + Send {
-    async fn commit(self) -> error_stack::Result<(), KernelError>;
-    async fn roll_back(self) -> error_stack::Result<(), KernelError>;
+    async fn commit(mut self) -> error_stack::Result<(), KernelError>;
+    async fn roll_back(mut self) -> error_stack::Result<(), KernelError>;
 }

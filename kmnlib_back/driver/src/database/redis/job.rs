@@ -4,7 +4,7 @@ use deadpool_redis::redis::AsyncCommands;
 use deadpool_redis::{redis, Connection};
 use error_stack::{Report, ResultExt};
 use kernel::interface::database::DatabaseConnection;
-use kernel::interface::job::{ErrorOperation, JobQueue};
+use kernel::interface::job::{DestructQueueInfo, ErrorOperation, ErroredInfo, JobQueue, QueueInfo};
 use kernel::KernelError;
 use redis::streams::StreamReadOptions;
 use redis::{RedisResult, Value};
@@ -16,18 +16,13 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{debug, error, warn};
+use uuid::Uuid;
 
 #[derive(Debug)]
 struct QueueData<T> {
     id: String,
     delivered_count: i64,
-    data: T,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct FailedData<T> {
-    error: String,
-    data: T,
+    info: QueueInfo<T>,
 }
 
 pub struct RedisJobRepository;
@@ -50,10 +45,10 @@ impl JobQueue for RedisJobRepository {
     type Transaction = RedisTransaction;
     async fn queue<T: Serialize + Sync + Send>(
         con: &mut Self::Transaction,
-        name: String,
-        data: T,
+        name: &str,
+        info: &QueueInfo<T>,
     ) -> error_stack::Result<(), KernelError> {
-        RedisJobInternal::insert_waiting(con, &name, &data).await
+        RedisJobInternal::insert_waiting(con, name, info).await
     }
 
     #[tracing::instrument(skip(db, block))]
@@ -69,7 +64,7 @@ impl JobQueue for RedisJobRepository {
             let QueueData {
                 id,
                 delivered_count,
-                data,
+                info,
             } = {
                 let mut con = match db.transact().await {
                     Ok(con) => con,
@@ -95,6 +90,7 @@ impl JobQueue for RedisJobRepository {
                 }
             };
             debug!("Processing Id: {id}, TryCount: {delivered_count}");
+            let DestructQueueInfo { id: uuid, data }: DestructQueueInfo<T> = info.into_destruct();
             let result = block(data.clone()).await;
             {
                 let transact = db.transact().await;
@@ -111,11 +107,11 @@ impl JobQueue for RedisJobRepository {
                         if let Err(report) = RedisJobInternal::push_failed_info(
                             &mut con,
                             &name,
-                            &id,
-                            &format!(
+                            format!(
                                 "{:?}",
                                 report.attach_printable("Task failed or 3 time delayed")
                             ),
+                            uuid,
                             data,
                         )
                         .await
@@ -127,8 +123,9 @@ impl JobQueue for RedisJobRepository {
                         if let Err(report) = RedisJobInternal::push_delayed_info(
                             &mut con,
                             &name,
-                            &id,
-                            &format!("{report:?}"),
+                            uuid,
+                            data,
+                            format!("{report:?}"),
                         )
                         .await
                         {
@@ -144,7 +141,7 @@ impl JobQueue for RedisJobRepository {
                     error!("{report:?}");
                 } else if delivered_count > 0 {
                     if let Err(report) =
-                        RedisJobInternal::remove_delayed_info(&mut con, &name, &id).await
+                        RedisJobInternal::remove_delayed_info(&mut con, &name, &uuid).await
                     {
                         error!("{report:?}");
                     };
@@ -152,11 +149,98 @@ impl JobQueue for RedisJobRepository {
             }
         }
     }
+
+    async fn get_queued_len(
+        con: &mut Self::Transaction,
+        name: &str,
+    ) -> error_stack::Result<usize, KernelError> {
+        RedisJobInternal::get_wait_len(con, name)
+            .await
+            .and_then(|size| usize::try_from(size).change_context_lazy(|| KernelError::Internal))
+    }
+
+    async fn get_delayed<T: for<'de> Deserialize<'de>>(
+        con: &mut Self::Transaction,
+        name: &str,
+        size: &i64,
+        offset: &i64,
+    ) -> error_stack::Result<Vec<ErroredInfo<T>>, KernelError> {
+        RedisJobInternal::get_delayed_info(con, name, size, offset).await
+    }
+
+    async fn get_delayed_len(
+        con: &mut Self::Transaction,
+        name: &str,
+    ) -> error_stack::Result<usize, KernelError> {
+        RedisJobInternal::get_delayed_len(con, name)
+            .await
+            .and_then(|size| usize::try_from(size).change_context_lazy(|| KernelError::Internal))
+    }
+
+    async fn get_failed<T: for<'de> Deserialize<'de>>(
+        con: &mut Self::Transaction,
+        name: &str,
+        size: &i64,
+        offset: &i64,
+    ) -> error_stack::Result<Vec<ErroredInfo<T>>, KernelError> {
+        RedisJobInternal::get_failed_info(con, name, size, offset).await
+    }
+
+    async fn get_failed_len(
+        con: &mut Self::Transaction,
+        name: &str,
+    ) -> error_stack::Result<usize, KernelError> {
+        RedisJobInternal::get_failed_len(con, name)
+            .await
+            .and_then(|size| usize::try_from(size).change_context_lazy(|| KernelError::Internal))
+    }
 }
+
+const QUEUE_FIELD: &str = "info";
 
 fn parse_error(value: impl Debug) -> Report<KernelError> {
     Report::new(KernelError::Internal)
         .attach_printable(format!("Failed to parse received data. {value:?}"))
+}
+
+async fn get_info_from_hash<T: for<'de> Deserialize<'de>>(
+    con: &mut Connection,
+    name: &str,
+    size: &i64,
+    offset: &i64,
+) -> error_stack::Result<Vec<T>, KernelError> {
+    if *size <= 0 {
+        return Ok(vec![]);
+    }
+    let result: Value = redis::cmd("HSCAN")
+        .arg(name)
+        .arg(offset)
+        .arg("COUNT")
+        .arg(size)
+        .query_async(con)
+        .await
+        .convert_error()?;
+    let bulk = match result {
+        Value::Bulk(bulk) => bulk,
+        _ => return Err(parse_error(result)),
+    };
+    let bulk = match bulk.as_slice() {
+        [Value::Data(_offset), Value::Bulk(bulk)] => bulk,
+        _ => return Err(parse_error(bulk)),
+    };
+    let usize = usize::try_from(*size).change_context_lazy(|| KernelError::Internal)?;
+    // HSCAN may return more than size
+    bulk.chunks(2)
+        .take(usize)
+        .map(|pair| match pair {
+            [Value::Data(_id), Value::Data(data)] => {
+                let info =
+                    serde_json::from_slice(data).change_context_lazy(|| KernelError::Internal)?;
+                Ok(info)
+            }
+            _ => Err(parse_error(pair)),
+        })
+        .collect()
 }
 
 pub(in crate::database) struct RedisJobInternal;
@@ -169,13 +253,13 @@ impl RedisJobInternal {
     async fn insert_waiting<T: Serialize>(
         con: &mut Connection,
         name: &str,
-        data: &T,
+        info: &QueueInfo<T>,
     ) -> error_stack::Result<(), KernelError> {
         // Ignore error
         let _ = Self::create_group(con, name).await;
-        let serialize = serde_json::to_string(data)
+        let serialize = serde_json::to_string(info)
             .map_err(|e| Report::new(e).change_context(KernelError::Internal))?;
-        con.xadd(name, "*", &[("data", &serialize)])
+        con.xadd(name, "*", &[(QUEUE_FIELD, &serialize)])
             .await
             .convert_error()
     }
@@ -226,7 +310,7 @@ impl RedisJobInternal {
                 .change_context_lazy(|| KernelError::Internal)?
                 .to_string(),
             delivered_count: 0,
-            data: serde_json::from_slice(&data).change_context_lazy(|| KernelError::Internal)?,
+            info: serde_json::from_slice(&data).change_context_lazy(|| KernelError::Internal)?,
         }))
     }
 
@@ -302,34 +386,55 @@ impl RedisJobInternal {
             _ => return Err(parse_error(bulk)),
         };
         match bulk.as_slice() {
-            [Value::Data(_field), Value::Data(data)] => Ok(Some(QueueData {
-                id,
-                delivered_count: count,
-                data: serde_json::from_slice(&data)
-                    .change_context_lazy(|| KernelError::Internal)?,
-            })),
-            _ => return Err(parse_error(bulk)),
+            [Value::Data(_field), Value::Data(data)] => {
+                let info: QueueInfo<T> =
+                    serde_json::from_slice(&data).change_context_lazy(|| KernelError::Internal)?;
+
+                Ok(Some(QueueData {
+                    id,
+                    delivered_count: count,
+                    info,
+                }))
+            }
+            _ => Err(parse_error(bulk)),
         }
     }
 
-    async fn push_delayed_info(
+    async fn push_delayed_info<T: Serialize>(
         con: &mut Connection,
         name: &str,
-        id: &str,
-        info: &str,
+        id: Uuid,
+        data: T,
+        stack_trace: String,
     ) -> error_stack::Result<(), KernelError> {
-        con.hset(&delayed(name), id, info).await.convert_error()
+        let string_id = id.to_string();
+        let info = ErroredInfo::new(id, data, stack_trace);
+        let raw = serde_json::to_string(&info).change_context_lazy(|| KernelError::Internal)?;
+        con.hset(&delayed(name), &string_id, &raw)
+            .await
+            .convert_error()
     }
 
     async fn remove_delayed_info(
         con: &mut Connection,
         name: &str,
-        id: &str,
+        id: &Uuid,
     ) -> error_stack::Result<(), KernelError> {
-        con.hdel(&delayed(name), id).await.convert_error()
+        con.hdel(&delayed(name), &id.to_string())
+            .await
+            .convert_error()
     }
 
-    async fn get_delayed_size(
+    async fn get_delayed_info<T: for<'de> Deserialize<'de>>(
+        con: &mut Connection,
+        name: &str,
+        size: &i64,
+        offset: &i64,
+    ) -> error_stack::Result<Vec<ErroredInfo<T>>, KernelError> {
+        get_info_from_hash(con, &delayed(name), size, offset).await
+    }
+
+    async fn get_delayed_len(
         con: &mut Connection,
         name: &str,
     ) -> error_stack::Result<i64, KernelError> {
@@ -346,19 +451,28 @@ impl RedisJobInternal {
     async fn push_failed_info<T: Serialize>(
         con: &mut Connection,
         name: &str,
-        id: &str,
-        info: &str,
+        info: String,
+        uuid: Uuid,
         data: T,
     ) -> error_stack::Result<(), KernelError> {
-        let data = FailedData {
-            error: info.to_string(),
-            data,
-        };
+        let raw_uuid = uuid.to_string();
+        let data = ErroredInfo::new(uuid, data, info);
         let raw = serde_json::to_string(&data).change_context_lazy(|| KernelError::Internal)?;
-        con.hset(&failed(name), id, raw).await.convert_error()
+        con.hset(&failed(name), &raw_uuid, &raw)
+            .await
+            .convert_error()
     }
 
-    async fn get_failed_size(
+    async fn get_failed_info<T: for<'de> Deserialize<'de>>(
+        con: &mut Connection,
+        name: &str,
+        size: &i64,
+        offset: &i64,
+    ) -> error_stack::Result<Vec<ErroredInfo<T>>, KernelError> {
+        get_info_from_hash(con, &failed(name), size, offset).await
+    }
+
+    async fn get_failed_len(
         con: &mut Connection,
         name: &str,
     ) -> error_stack::Result<i64, KernelError> {
@@ -372,7 +486,7 @@ impl RedisJobInternal {
         }
     }
 
-    async fn get_wait_size(
+    async fn get_wait_len(
         con: &mut Connection,
         name: &str,
     ) -> error_stack::Result<i64, KernelError> {
@@ -393,7 +507,7 @@ mod test {
     use error_stack::Report;
     use kernel::interface::database::DatabaseConnection;
     use kernel::interface::job::ErrorOperation::Delay;
-    use kernel::interface::job::JobQueue;
+    use kernel::interface::job::{JobQueue, QueueInfo};
     use kernel::KernelError;
     use rand::random;
     use serde::{Deserialize, Serialize};
@@ -402,12 +516,14 @@ mod test {
     use tracing::info;
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
+    use uuid::Uuid;
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     struct TestData {
         a: String,
     }
 
+    #[test_with::env(REDIS_TEST)]
     #[tokio::test]
     async fn test_internal() -> error_stack::Result<(), KernelError> {
         let db = RedisDatabase::new()?;
@@ -417,7 +533,8 @@ mod test {
         let data = TestData {
             a: "testtss".to_string(),
         };
-        RedisJobInternal::insert_waiting(&mut con, name, &data).await?;
+        let info = QueueInfo::new(Uuid::new_v4(), data);
+        RedisJobInternal::insert_waiting(&mut con, name, &info).await?;
         let result: QueueData<TestData> = RedisJobInternal::pop_to_process(&mut con, name, member)
             .await
             .and_then(|option| option.ok_or_else(|| Report::new(KernelError::Internal)))?;
@@ -432,6 +549,8 @@ mod test {
         Ok(())
     }
 
+    #[ignore]
+    #[test_with::env(REDIS_TEST)]
     #[tokio::test]
     async fn test_mq() -> error_stack::Result<(), KernelError> {
         tracing_subscriber::registry()
@@ -468,18 +587,59 @@ mod test {
                 let data = TestData {
                     a: format!("test:{i}"),
                 };
+                let data = QueueInfo::new(Uuid::new_v4(), data);
                 // Queue
-                RedisJobRepository::queue(&mut con, name.to_string(), data).await?;
+                RedisJobRepository::queue(&mut con, name, &data).await?;
             }
         }
 
         let mut con = db.transact().await.unwrap();
         loop {
-            let wait = RedisJobInternal::get_wait_size(&mut con, name).await?;
-            let delayed = RedisJobInternal::get_delayed_size(&mut con, name).await?;
-            let failed = RedisJobInternal::get_failed_size(&mut con, name).await?;
+            let wait = RedisJobInternal::get_wait_len(&mut con, name).await?;
+            let delayed = RedisJobInternal::get_delayed_len(&mut con, name).await?;
+            let failed = RedisJobInternal::get_failed_len(&mut con, name).await?;
             info!("Count: {wait}, Delayed: {delayed}, Failed: {failed}");
             sleep(Duration::from_secs(1)).await;
         }
+    }
+
+    #[test_with::env(REDIS_TEST)]
+    #[tokio::test]
+    async fn test_delayed() -> error_stack::Result<(), KernelError> {
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| "debug".into()),
+            )
+            .with(tracing_subscriber::fmt::layer())
+            .init();
+        let db = RedisDatabase::new()?;
+        let name = "test";
+        let mut con = db.transact().await?;
+        let delays = RedisJobRepository::get_delayed::<TestData>(&mut con, name, &1, &0).await?;
+        for info in delays {
+            info!("info: {info:?}");
+        }
+        Ok(())
+    }
+
+    #[test_with::env(REDIS_TEST)]
+    #[tokio::test]
+    async fn test_failed() -> error_stack::Result<(), KernelError> {
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| "debug".into()),
+            )
+            .with(tracing_subscriber::fmt::layer())
+            .init();
+        let db = RedisDatabase::new()?;
+        let name = "test";
+        let mut con = db.transact().await?;
+        let delays = RedisJobRepository::get_failed::<TestData>(&mut con, name, &1, &0).await?;
+        for info in delays {
+            info!("info: {info:?}");
+        }
+        Ok(())
     }
 }

@@ -3,7 +3,6 @@ use crate::error::ConvertError;
 use deadpool_redis::redis::AsyncCommands;
 use deadpool_redis::{redis, Connection};
 use error_stack::{Report, ResultExt};
-use itertools::Itertools;
 use kernel::interface::database::DatabaseConnection;
 use kernel::interface::job::{ErrorOperation, JobQueue};
 use kernel::KernelError;
@@ -197,44 +196,38 @@ impl RedisJobInternal {
             .xread_options(&[name], &[">"], &options)
             .await
             .convert_error()?;
-        if let Value::Bulk(result) = result {
-            if let Some(Value::Bulk(bulk)) = result.iter().next() {
-                if let Some((Value::Data(_name), Value::Bulk(bulk))) = bulk.iter().collect_tuple() {
-                    if let Some(Value::Bulk(bulk)) = bulk.iter().next() {
-                        if let Some((Value::Data(id), Value::Bulk(bulk))) =
-                            bulk.iter().collect_tuple()
-                        {
-                            if let Some((Value::Data(_field), Value::Data(data))) =
-                                bulk.iter().collect_tuple()
-                            {
-                                Ok(Some(QueueData {
-                                    id: from_utf8(&id)
-                                        .change_context_lazy(|| KernelError::Internal)?
-                                        .to_string(),
-                                    delivered_count: 0,
-                                    data: serde_json::from_slice(&data)
-                                        .change_context_lazy(|| KernelError::Internal)?,
-                                }))
-                            } else {
-                                Err(parse_error(bulk))
-                            }
-                        } else {
-                            Err(parse_error(bulk))
-                        }
-                    } else {
-                        Err(parse_error(bulk))
-                    }
-                } else {
-                    Err(parse_error(bulk))
-                }
-            } else {
-                Err(parse_error(result))
-            }
-        } else if let Value::Nil = result {
-            Ok(None)
-        } else {
-            Err(parse_error(result))
-        }
+        let bulk = match result {
+            Value::Bulk(bulk) => bulk,
+            Value::Nil => return Ok(None),
+            _ => return Err(parse_error(result)),
+        };
+        let bulk = match bulk.as_slice() {
+            [Value::Bulk(bulk)] => bulk,
+            _ => return Err(parse_error(bulk)),
+        };
+        let bulk = match bulk.as_slice() {
+            [Value::Data(_name), Value::Bulk(bulk)] => bulk,
+            _ => return Err(parse_error(bulk)),
+        };
+        let bulk = match bulk.as_slice() {
+            [Value::Bulk(bulk)] => bulk,
+            _ => return Err(parse_error(bulk)),
+        };
+        let (id, bulk) = match bulk.as_slice() {
+            [Value::Data(id), Value::Bulk(bulk)] => (id, bulk),
+            _ => return Err(parse_error(bulk)),
+        };
+        let data = match bulk.as_slice() {
+            [Value::Data(_field), Value::Data(data)] => data,
+            _ => return Err(parse_error(bulk)),
+        };
+        Ok(Some(QueueData {
+            id: from_utf8(&id)
+                .change_context_lazy(|| KernelError::Internal)?
+                .to_string(),
+            delivered_count: 0,
+            data: serde_json::from_slice(&data).change_context_lazy(|| KernelError::Internal)?,
+        }))
     }
 
     async fn mark_done(
@@ -270,61 +263,52 @@ impl RedisJobInternal {
             .await
             .convert_error()?;
 
-        let (id, count) = if let Value::Bulk(bulk) = value {
-            if bulk.is_empty() {
-                return Ok(None);
-            }
-            if let Some(Value::Bulk(bulk)) = bulk.iter().next() {
-                if let Some((
-                    Value::Data(id),
-                    Value::Data(_original_owner),
-                    _time,
-                    Value::Int(count),
-                )) = bulk.iter().collect_tuple()
-                {
-                    (
-                        from_utf8(&id)
-                            .change_context_lazy(|| KernelError::Internal)?
-                            .to_string(),
-                        *count,
-                    )
-                } else {
-                    return Err(parse_error(bulk));
-                }
-            } else {
-                return Err(parse_error(bulk));
-            }
-        } else {
-            return Err(parse_error(value));
+        let bulk = match value {
+            Value::Bulk(bulk) => bulk,
+            _ => return Err(parse_error(value)),
+        };
+        if bulk.is_empty() {
+            return Ok(None);
+        }
+        let bulk = match bulk.as_slice() {
+            [Value::Bulk(bulk)] => bulk,
+            _ => return Err(parse_error(bulk)),
+        };
+        let (id, count) = match bulk.as_slice() {
+            [Value::Data(id), Value::Data(_original_owner), _time, Value::Int(count)] => (
+                from_utf8(&id)
+                    .change_context_lazy(|| KernelError::Internal)?
+                    .to_string(),
+                *count,
+            ),
+            _ => return Err(parse_error(bulk)),
         };
 
         let result: Value = con
             .xclaim(name, &group, own_member, &time_millis, &[&id])
             .await
             .convert_error()?;
-        if let Value::Bulk(bulk) = result {
-            if let Some(Value::Bulk(bulk)) = bulk.iter().next() {
-                if let Some((Value::Data(_id), Value::Bulk(bulk))) = bulk.iter().collect_tuple() {
-                    if let Some((Value::Data(_field), Value::Data(data))) =
-                        bulk.iter().collect_tuple()
-                    {
-                        Ok(Some(QueueData {
-                            id,
-                            delivered_count: count,
-                            data: serde_json::from_slice(&data)
-                                .change_context_lazy(|| KernelError::Internal)?,
-                        }))
-                    } else {
-                        Err(parse_error(bulk))
-                    }
-                } else {
-                    Err(parse_error(bulk))
-                }
-            } else {
-                Err(parse_error(bulk))
-            }
-        } else {
-            Err(parse_error(result))
+
+        let bulk = match result {
+            Value::Bulk(bulk) => bulk,
+            _ => return Err(parse_error(result)),
+        };
+        let bulk = match bulk.as_slice() {
+            [Value::Bulk(bulk)] => bulk,
+            _ => return Err(parse_error(bulk)),
+        };
+        let bulk = match bulk.as_slice() {
+            [Value::Data(_id), Value::Bulk(bulk)] => bulk,
+            _ => return Err(parse_error(bulk)),
+        };
+        match bulk.as_slice() {
+            [Value::Data(_field), Value::Data(data)] => Ok(Some(QueueData {
+                id,
+                delivered_count: count,
+                data: serde_json::from_slice(&data)
+                    .change_context_lazy(|| KernelError::Internal)?,
+            })),
+            _ => return Err(parse_error(bulk)),
         }
     }
 

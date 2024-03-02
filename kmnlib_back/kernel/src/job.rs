@@ -74,22 +74,26 @@ pub trait JobQueue: 'static + Sync + Send {
         con: &mut Self::Transaction,
         name: &str,
     ) -> error_stack::Result<usize, KernelError>;
+
     async fn get_delayed<T: for<'de> Deserialize<'de>>(
         con: &mut Self::Transaction,
         name: &str,
         size: &i64,
         offset: &i64,
     ) -> error_stack::Result<Vec<ErroredInfo<T>>, KernelError>;
+
     async fn get_delayed_len(
         con: &mut Self::Transaction,
         name: &str,
     ) -> error_stack::Result<usize, KernelError>;
+
     async fn get_failed<T: for<'de> Deserialize<'de>>(
         con: &mut Self::Transaction,
         name: &str,
         size: &i64,
         offset: &i64,
     ) -> error_stack::Result<Vec<ErroredInfo<T>>, KernelError>;
+
     async fn get_failed_len(
         con: &mut Self::Transaction,
         name: &str,

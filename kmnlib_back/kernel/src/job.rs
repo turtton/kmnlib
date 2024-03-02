@@ -1,10 +1,11 @@
-use crate::database::{DatabaseConnection, DependOnDatabaseConnection, Transaction};
+use crate::database::DatabaseConnection;
 use crate::KernelError;
 use destructure::Destructure;
 use error_stack::Context;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::future::Future;
+use std::pin::Pin;
 use uuid::Uuid;
 use vodca::References;
 
@@ -54,57 +55,50 @@ impl<T> ErroredInfo<T> {
     }
 }
 
-#[async_trait::async_trait]
-pub trait JobQueue: 'static + Sync + Send {
-    type DatabaseConnection: DatabaseConnection;
-    type Transaction: Transaction;
-    async fn queue<T: Serialize + Sync + Send>(
-        con: &mut Self::Transaction,
-        name: &str,
-        info: &QueueInfo<T>,
-    ) -> error_stack::Result<(), KernelError>;
-
-    async fn listen<T, F, R>(db: Self::DatabaseConnection, name: String, block: F)
-    where
-        T: Clone + Serialize + for<'de> Deserialize<'de> + Sync + Send,
-        R: Future<Output = error_stack::Result<(), ErrorOperation>> + Send,
-        F: Fn(T) -> R + Sync + Send;
-
-    async fn get_queued_len(
-        con: &mut Self::Transaction,
-        name: &str,
-    ) -> error_stack::Result<usize, KernelError>;
-
-    async fn get_delayed<T: for<'de> Deserialize<'de>>(
-        con: &mut Self::Transaction,
-        name: &str,
-        size: &i64,
-        offset: &i64,
-    ) -> error_stack::Result<Vec<ErroredInfo<T>>, KernelError>;
-
-    async fn get_delayed_len(
-        con: &mut Self::Transaction,
-        name: &str,
-    ) -> error_stack::Result<usize, KernelError>;
-
-    async fn get_failed<T: for<'de> Deserialize<'de>>(
-        con: &mut Self::Transaction,
-        name: &str,
-        size: &i64,
-        offset: &i64,
-    ) -> error_stack::Result<Vec<ErroredInfo<T>>, KernelError>;
-
-    async fn get_failed_len(
-        con: &mut Self::Transaction,
-        name: &str,
-    ) -> error_stack::Result<usize, KernelError>;
+#[derive(Debug, Clone)]
+pub struct JQConfig {
+    pub worker_count: i32,
+    pub max_retry: i32,
+    pub retry_delay: i32,
 }
 
-pub trait DependOnJobQueue: 'static + Sync + Send + DependOnDatabaseConnection {
-    type JobQueue: JobQueue<
-        DatabaseConnection = Self::DatabaseConnection,
-        Transaction = <Self::DatabaseConnection as DatabaseConnection>::Transaction,
-    >;
+#[async_trait::async_trait]
+pub trait JobQueue<T>: 'static + Sync + Send
+where
+    T: 'static + Clone + Serialize + for<'de> Deserialize<'de> + Sync + Send,
+{
+    type DatabaseConnection: DatabaseConnection;
 
-    fn job_queue(&self) -> &Self::JobQueue;
+    fn new<F>(db: Self::DatabaseConnection, name: &str, config: JQConfig, process: F) -> Self
+    where
+        F: 'static
+            + Fn(
+                T,
+            ) -> Pin<
+                Box<dyn Future<Output = error_stack::Result<(), ErrorOperation>> + Sync + Send>,
+            >
+            + Sync
+            + Send;
+
+    fn start_workers(&self);
+
+    async fn queue(&self, info: &QueueInfo<T>) -> error_stack::Result<(), KernelError>;
+
+    async fn get_queued_len(&self) -> error_stack::Result<usize, KernelError>;
+
+    async fn get_delayed(
+        &self,
+        size: &i64,
+        offset: &i64,
+    ) -> error_stack::Result<Vec<ErroredInfo<T>>, KernelError>;
+
+    async fn get_delayed_len(&self) -> error_stack::Result<usize, KernelError>;
+
+    async fn get_failed(
+        &self,
+        size: &i64,
+        offset: &i64,
+    ) -> error_stack::Result<Vec<ErroredInfo<T>>, KernelError>;
+
+    async fn get_failed_len(&self) -> error_stack::Result<usize, KernelError>;
 }

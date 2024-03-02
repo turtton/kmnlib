@@ -5,7 +5,7 @@ use deadpool_redis::{redis, Connection};
 use error_stack::{Report, ResultExt};
 use kernel::interface::database::DatabaseConnection;
 use kernel::interface::job::{
-    DestructQueueInfo, ErrorOperation, ErroredInfo, JQConfig, JobQueue, QueueInfo,
+    DestructQueueInfo, ErrorOperation, ErroredInfo, MQConfig, MessageQueue, QueueInfo,
 };
 use kernel::KernelError;
 use redis::streams::StreamReadOptions;
@@ -29,13 +29,13 @@ struct QueueData<T> {
     info: QueueInfo<T>,
 }
 
-pub struct RedisJobRepository<T>
+pub struct RedisMessageQueue<T>
 where
     T: 'static + Clone + Serialize + for<'de> Deserialize<'de> + Sync + Send,
 {
     name: String,
     db: RedisDatabase,
-    config: JQConfig,
+    config: MQConfig,
     worker_process: Arc<
         Box<
             dyn Fn(
@@ -49,7 +49,7 @@ where
     _data_type: PhantomData<T>,
 }
 
-impl<T> RedisJobRepository<T>
+impl<T> RedisMessageQueue<T>
 where
     T: Clone + Serialize + for<'de> Deserialize<'de> + Sync + Send,
 {
@@ -57,7 +57,7 @@ where
     async fn listen(
         db: RedisDatabase,
         name: String,
-        config: JQConfig,
+        config: MQConfig,
         block: Arc<
             Box<
                 impl Fn(
@@ -172,13 +172,13 @@ where
 }
 
 #[async_trait::async_trait]
-impl<T> JobQueue<T> for RedisJobRepository<T>
+impl<T> MessageQueue<T> for RedisMessageQueue<T>
 where
     T: 'static + Clone + Serialize + for<'de> Deserialize<'de> + Sync + Send,
 {
     type DatabaseConnection = RedisDatabase;
 
-    fn new<F>(db: Self::DatabaseConnection, name: &str, config: JQConfig, process: F) -> Self
+    fn new<F>(db: Self::DatabaseConnection, name: &str, config: MQConfig, process: F) -> Self
     where
         F: 'static
             + Fn(
@@ -205,7 +205,7 @@ where
             let name = self.name.clone();
             let config = self.config.clone();
             tokio::spawn(async move {
-                RedisJobRepository::listen(db, name, config, process).await;
+                RedisMessageQueue::listen(db, name, config, process).await;
             });
         }
     }
@@ -579,12 +579,12 @@ impl RedisJobInternal {
 
 #[cfg(test)]
 mod test {
-    use crate::database::redis::job::{QueueData, RedisJobInternal, RedisJobRepository};
+    use crate::database::redis::mq::{QueueData, RedisJobInternal, RedisMessageQueue};
     use crate::database::RedisDatabase;
     use error_stack::Report;
     use kernel::interface::database::DatabaseConnection;
     use kernel::interface::job::ErrorOperation::Delay;
-    use kernel::interface::job::{JQConfig, JobQueue, QueueInfo};
+    use kernel::interface::job::{MQConfig, MessageQueue, QueueInfo};
     use kernel::KernelError;
     use rand::random;
     use serde::{Deserialize, Serialize};
@@ -639,12 +639,12 @@ mod test {
             .init();
         let db = RedisDatabase::new()?;
         let name = "test";
-        let config = JQConfig {
+        let config = MQConfig {
             worker_count: 5,
             max_retry: 3,
             retry_delay: 1000,
         };
-        let mq = RedisJobRepository::new(db.clone(), name, config, |data: TestData| {
+        let mq = RedisMessageQueue::new(db.clone(), name, config, |data: TestData| {
             Box::pin(async move {
                 info!("data: {data:?}");
                 sleep(Duration::from_millis(20)).await;

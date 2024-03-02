@@ -5,7 +5,7 @@ mod entity;
 mod error;
 mod event;
 mod handler;
-mod job;
+mod mq;
 mod modify;
 mod query;
 
@@ -32,6 +32,6 @@ pub mod interface {
         pub use crate::modify::*;
     }
     pub mod job {
-        pub use crate::job::*;
+        pub use crate::mq::*;
     }
 }

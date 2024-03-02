@@ -56,20 +56,20 @@ impl<T> ErroredInfo<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct JQConfig {
+pub struct MQConfig {
     pub worker_count: i32,
     pub max_retry: i32,
     pub retry_delay: i32,
 }
 
 #[async_trait::async_trait]
-pub trait JobQueue<T>: 'static + Sync + Send
+pub trait MessageQueue<T>: 'static + Sync + Send
 where
     T: 'static + Clone + Serialize + for<'de> Deserialize<'de> + Sync + Send,
 {
     type DatabaseConnection: DatabaseConnection;
 
-    fn new<F>(db: Self::DatabaseConnection, name: &str, config: JQConfig, process: F) -> Self
+    fn new<F>(db: Self::DatabaseConnection, name: &str, config: MQConfig, process: F) -> Self
     where
         F: 'static
             + Fn(

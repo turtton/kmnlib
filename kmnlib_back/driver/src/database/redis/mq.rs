@@ -5,16 +5,14 @@ use deadpool_redis::{redis, Connection};
 use error_stack::{Report, ResultExt};
 use kernel::interface::database::DatabaseConnection;
 use kernel::interface::job::{
-    DestructQueueInfo, ErrorOperation, ErroredInfo, MQConfig, MessageQueue, QueueInfo,
+    AsyncWork, DestructQueueInfo, ErrorOperation, ErroredInfo, MQConfig, MessageQueue, QueueInfo,
 };
 use kernel::KernelError;
 use redis::streams::StreamReadOptions;
 use redis::{RedisResult, Value};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use std::future::Future;
 use std::marker::PhantomData;
-use std::pin::Pin;
 use std::str::from_utf8;
 use std::sync::Arc;
 use std::time::Duration;
@@ -36,16 +34,7 @@ where
     name: String,
     db: RedisDatabase,
     config: MQConfig,
-    worker_process: Arc<
-        Box<
-            dyn Fn(
-                    T,
-                ) -> Pin<
-                    Box<dyn Future<Output = error_stack::Result<(), ErrorOperation>> + Sync + Send>,
-                > + Sync
-                + Send,
-        >,
-    >,
+    worker_process: Arc<Box<dyn Fn(T) -> AsyncWork + Send + Sync>>,
     _data_type: PhantomData<T>,
 }
 
@@ -58,21 +47,7 @@ where
         db: RedisDatabase,
         name: String,
         config: MQConfig,
-        block: Arc<
-            Box<
-                impl Fn(
-                        T,
-                    ) -> Pin<
-                        Box<
-                            dyn Future<Output = error_stack::Result<(), ErrorOperation>>
-                                + Sync
-                                + Send,
-                        >,
-                    > + Sync
-                    + Send
-                    + ?Sized,
-            >,
-        >,
+        block: Arc<Box<impl Fn(T) -> AsyncWork + Sync + Send + ?Sized>>,
     ) {
         let member_name = format!("consumer:{}", Uuid::new_v4());
         loop {
@@ -180,14 +155,7 @@ where
 
     fn new<F>(db: Self::DatabaseConnection, name: &str, config: MQConfig, process: F) -> Self
     where
-        F: 'static
-            + Fn(
-                T,
-            ) -> Pin<
-                Box<dyn Future<Output = error_stack::Result<(), ErrorOperation>> + Sync + Send>,
-            >
-            + Sync
-            + Send,
+        F: 'static + Fn(T) -> AsyncWork + Sync + Send,
     {
         Self {
             name: name.to_string(),
@@ -199,7 +167,7 @@ where
     }
 
     fn start_workers(&self) {
-        for _ in 1..*&self.config.worker_count {
+        for _ in 1..self.config.worker_count {
             let db = self.db.clone();
             let process = Arc::clone(&self.worker_process);
             let name = self.name.clone();
@@ -312,7 +280,7 @@ impl RedisJobInternal {
         let options = StreamReadOptions::default()
             .block(1000)
             .count(1)
-            .group(&group(name), member);
+            .group(group(name), member);
         let result: Value = con
             .xread_options(&[name], &[">"], &options)
             .await
@@ -343,11 +311,11 @@ impl RedisJobInternal {
             _ => return Err(parse_error(bulk)),
         };
         Ok(Some(QueueData {
-            id: from_utf8(&id)
+            id: from_utf8(id)
                 .change_context_lazy(|| KernelError::Internal)?
                 .to_string(),
             delivered_count: 0,
-            info: serde_json::from_slice(&data).change_context_lazy(|| KernelError::Internal)?,
+            info: serde_json::from_slice(data).change_context_lazy(|| KernelError::Internal)?,
         }))
     }
 
@@ -397,7 +365,7 @@ impl RedisJobInternal {
         };
         let (id, count) = match bulk.as_slice() {
             [Value::Data(id), Value::Data(_original_owner), _time, Value::Int(count)] => (
-                from_utf8(&id)
+                from_utf8(id)
                     .change_context_lazy(|| KernelError::Internal)?
                     .to_string(),
                 *count,
@@ -406,7 +374,7 @@ impl RedisJobInternal {
         };
 
         let result: Value = con
-            .xclaim(name, &group, own_member, &time_millis, &[&id])
+            .xclaim(name, &group, own_member, time_millis, &[&id])
             .await
             .convert_error()?;
 
@@ -425,7 +393,7 @@ impl RedisJobInternal {
         match bulk.as_slice() {
             [Value::Data(_field), Value::Data(data)] => {
                 let info: QueueInfo<T> =
-                    serde_json::from_slice(&data).change_context_lazy(|| KernelError::Internal)?;
+                    serde_json::from_slice(data).change_context_lazy(|| KernelError::Internal)?;
 
                 Ok(Some(QueueData {
                     id,

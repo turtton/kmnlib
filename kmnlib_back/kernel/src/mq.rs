@@ -62,6 +62,9 @@ pub struct MQConfig {
     pub retry_delay: i32,
 }
 
+pub type AsyncWork =
+    Pin<Box<dyn Future<Output = error_stack::Result<(), ErrorOperation>> + Sync + Send>>;
+
 #[async_trait::async_trait]
 pub trait MessageQueue<T>: 'static + Sync + Send
 where
@@ -71,14 +74,7 @@ where
 
     fn new<F>(db: Self::DatabaseConnection, name: &str, config: MQConfig, process: F) -> Self
     where
-        F: 'static
-            + Fn(
-                T,
-            ) -> Pin<
-                Box<dyn Future<Output = error_stack::Result<(), ErrorOperation>> + Sync + Send>,
-            >
-            + Sync
-            + Send;
+        F: 'static + Fn(T) -> AsyncWork + Sync + Send;
 
     fn start_workers(&self);
 

@@ -5,8 +5,8 @@ mod entity;
 mod error;
 mod event;
 mod handler;
-mod mq;
 mod modify;
+mod mq;
 mod query;
 
 #[cfg(feature = "prelude")]

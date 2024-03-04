@@ -192,40 +192,54 @@ where
             .and_then(|size| usize::try_from(size).change_context_lazy(|| KernelError::Internal))
     }
 
-    async fn get_delayed(
+    async fn get_delayed_infos(
         &self,
         size: &i64,
         offset: &i64,
     ) -> error_stack::Result<Vec<ErroredInfo<T>>, KernelError> {
-        let name = &self.name;
+        let name = delayed(&self.name);
         let mut con = self.db.transact().await?;
-        RedisJobInternal::get_delayed_info(&mut con, name, size, offset).await
+        RedisJobInternal::get_infos_from_hash(&mut con, &name, size, offset).await
+    }
+
+    async fn get_delayed_info(
+        &self,
+        id: &Uuid,
+    ) -> error_stack::Result<Option<ErroredInfo<T>>, KernelError> {
+        let name = delayed(&self.name);
+        let mut con = self.db.transact().await?;
+        RedisJobInternal::get_info_from_hash(&mut con, &name, id).await
     }
 
     async fn get_delayed_len(&self) -> error_stack::Result<usize, KernelError> {
-        let name = &self.name;
+        let name = delayed(&self.name);
         let mut con = self.db.transact().await?;
-        RedisJobInternal::get_delayed_len(&mut con, name)
-            .await
-            .and_then(|size| usize::try_from(size).change_context_lazy(|| KernelError::Internal))
+        RedisJobInternal::get_hash_len(&mut con, &name).await
     }
 
-    async fn get_failed(
+    async fn get_failed_infos(
         &self,
         size: &i64,
         offset: &i64,
     ) -> error_stack::Result<Vec<ErroredInfo<T>>, KernelError> {
-        let name = &self.name;
         let mut con = self.db.transact().await?;
-        RedisJobInternal::get_failed_info(&mut con, name, size, offset).await
+        let name = failed(&self.name);
+        RedisJobInternal::get_infos_from_hash(&mut con, &name, size, offset).await
+    }
+
+    async fn get_failed_info(
+        &self,
+        id: &Uuid,
+    ) -> error_stack::Result<Option<ErroredInfo<T>>, KernelError> {
+        let mut con = self.db.transact().await?;
+        let name = failed(&self.name);
+        RedisJobInternal::get_info_from_hash(&mut con, &name, id).await
     }
 
     async fn get_failed_len(&self) -> error_stack::Result<usize, KernelError> {
-        let name = &self.name;
+        let name = failed(&self.name);
         let mut con = self.db.transact().await?;
-        RedisJobInternal::get_failed_len(&mut con, name)
-            .await
-            .and_then(|size| usize::try_from(size).change_context_lazy(|| KernelError::Internal))
+        RedisJobInternal::get_hash_len(&mut con, &name).await
     }
 }
 
@@ -430,27 +444,19 @@ impl RedisJobInternal {
             .convert_error()
     }
 
-    async fn get_delayed_info<T: for<'de> Deserialize<'de>>(
+    async fn get_hash_len(
         con: &mut Connection,
         name: &str,
-        size: &i64,
-        offset: &i64,
-    ) -> error_stack::Result<Vec<ErroredInfo<T>>, KernelError> {
-        Self::get_info_from_hash(con, &delayed(name), size, offset).await
-    }
-
-    async fn get_delayed_len(
-        con: &mut Connection,
-        name: &str,
-    ) -> error_stack::Result<i64, KernelError> {
-        let delayed = delayed(name);
-        let result: Value = con.hlen(&delayed).await.convert_error()?;
-        if let Value::Int(size) = result {
-            Ok(size)
-        } else {
-            Err(Report::new(KernelError::Internal)
-                .attach_printable(format!("Failed to get size. target: {delayed}")))
-        }
+    ) -> error_stack::Result<usize, KernelError> {
+        let result: Value = con.hlen(name).await.convert_error()?;
+        let size = match result {
+            Value::Int(size) => size,
+            _ => {
+                return Err(parse_error(result)
+                    .attach_printable(format!("Failed to get size. target: {name}")))
+            }
+        };
+        usize::try_from(size).change_context_lazy(|| KernelError::Internal)
     }
 
     async fn push_failed_info<T: Serialize>(
@@ -468,29 +474,6 @@ impl RedisJobInternal {
             .convert_error()
     }
 
-    async fn get_failed_info<T: for<'de> Deserialize<'de>>(
-        con: &mut Connection,
-        name: &str,
-        size: &i64,
-        offset: &i64,
-    ) -> error_stack::Result<Vec<ErroredInfo<T>>, KernelError> {
-        Self::get_info_from_hash(con, &failed(name), size, offset).await
-    }
-
-    async fn get_failed_len(
-        con: &mut Connection,
-        name: &str,
-    ) -> error_stack::Result<i64, KernelError> {
-        let failed = failed(name);
-        let result: Value = con.hlen(&failed).await.convert_error()?;
-        if let Value::Int(size) = result {
-            Ok(size)
-        } else {
-            Err(Report::new(KernelError::Internal)
-                .attach_printable(format!("Failed to get size. target: {failed}")))
-        }
-    }
-
     async fn get_wait_len(
         con: &mut Connection,
         name: &str,
@@ -504,7 +487,7 @@ impl RedisJobInternal {
         }
     }
 
-    async fn get_info_from_hash<T: for<'de> Deserialize<'de>>(
+    async fn get_infos_from_hash<T: for<'de> Deserialize<'de>>(
         con: &mut Connection,
         name: &str,
         size: &i64,
@@ -542,6 +525,23 @@ impl RedisJobInternal {
                 _ => Err(parse_error(pair)),
             })
             .collect()
+    }
+
+    async fn get_info_from_hash<T: for<'de> Deserialize<'de>>(
+        con: &mut Connection,
+        name: &str,
+        id: &Uuid,
+    ) -> error_stack::Result<Option<T>, KernelError> {
+        let result: Value = con.hget(name, &id.to_string()).await.convert_error()?;
+        match result {
+            Value::Data(data) => {
+                let info =
+                    serde_json::from_slice(&data).change_context_lazy(|| KernelError::Internal)?;
+                Ok(Some(info))
+            }
+            Value::Nil => Ok(None),
+            _ => Err(parse_error(result)),
+        }
     }
 }
 

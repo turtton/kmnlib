@@ -82,19 +82,29 @@ where
 
     async fn get_queued_len(&self) -> error_stack::Result<usize, KernelError>;
 
-    async fn get_delayed(
+    async fn get_delayed_infos(
         &self,
         size: &i64,
         offset: &i64,
     ) -> error_stack::Result<Vec<ErroredInfo<T>>, KernelError>;
+
+    async fn get_delayed_info(
+        &self,
+        id: &Uuid,
+    ) -> error_stack::Result<Option<ErroredInfo<T>>, KernelError>;
 
     async fn get_delayed_len(&self) -> error_stack::Result<usize, KernelError>;
 
-    async fn get_failed(
+    async fn get_failed_infos(
         &self,
         size: &i64,
         offset: &i64,
     ) -> error_stack::Result<Vec<ErroredInfo<T>>, KernelError>;
+
+    async fn get_failed_info(
+        &self,
+        id: &Uuid,
+    ) -> error_stack::Result<Option<ErroredInfo<T>>, KernelError>;
 
     async fn get_failed_len(&self) -> error_stack::Result<usize, KernelError>;
 }

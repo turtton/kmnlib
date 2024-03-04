@@ -1,5 +1,6 @@
 use destructure::Destructure;
 use error_stack::Report;
+use serde::{Deserialize, Serialize};
 
 use crate::entity::{IsDeleted, User, UserId, UserName, UserRentLimit};
 use crate::event::{Applier, DestructEventInfo, EventInfo, EventRowFieldAttachments};
@@ -9,7 +10,7 @@ const USER_CREATED: &str = "user_created";
 const USER_UPDATED: &str = "user_updated";
 const USER_DELETED: &str = "user_deleted";
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum UserEvent {
     Create {
         id: UserId,

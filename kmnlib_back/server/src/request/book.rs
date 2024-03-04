@@ -1,6 +1,8 @@
 use crate::controller::Intake;
+use crate::mq::CommandOperation;
 use application::transfer::{GetAllBookDto, GetBookDto};
 use kernel::interface::event::BookEvent;
+use kernel::interface::mq::QueueInfo;
 use kernel::prelude::entity::{BookAmount, BookId, BookTitle, SelectLimit, SelectOffset};
 use serde::Deserialize;
 use uuid::Uuid;
@@ -62,23 +64,25 @@ impl Intake<CreateBookRequest> for BookTransformer {
 }
 
 impl Intake<(Uuid, UpdateBookRequest)> for BookTransformer {
-    type To = BookEvent;
+    type To = QueueInfo<CommandOperation>;
     fn emit(&self, input: (Uuid, UpdateBookRequest)) -> Self::To {
         let (id, input) = input;
-        Self::To::Update {
+        let operation = CommandOperation::book(BookEvent::Update {
             id: BookId::new(id),
             title: input.title.map(BookTitle::new),
             amount: input.amount.map(BookAmount::new),
-        }
+        });
+        Self::To::from(operation)
     }
 }
 
 impl Intake<DeleteBookRequest> for BookTransformer {
-    type To = BookEvent;
+    type To = QueueInfo<CommandOperation>;
     fn emit(&self, input: DeleteBookRequest) -> Self::To {
-        Self::To::Delete {
+        let operation = CommandOperation::book(BookEvent::Delete {
             id: BookId::new(input.id),
-        }
+        });
+        Self::To::from(operation)
     }
 }
 

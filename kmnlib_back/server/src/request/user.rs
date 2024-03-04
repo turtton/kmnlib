@@ -1,6 +1,8 @@
 use crate::controller::Intake;
+use crate::mq::CommandOperation;
 use application::transfer::{GetAllUserDto, GetUserDto};
 use kernel::interface::event::UserEvent;
+use kernel::interface::mq::QueueInfo;
 use kernel::prelude::entity::{SelectLimit, SelectOffset, UserId, UserName, UserRentLimit};
 use serde::Deserialize;
 use uuid::Uuid;
@@ -61,22 +63,24 @@ impl Intake<CreateUserRequest> for UserTransformer {
 }
 
 impl Intake<(Uuid, UpdateUserRequest)> for UserTransformer {
-    type To = UserEvent;
+    type To = QueueInfo<CommandOperation>;
     fn emit(&self, (id, req): (Uuid, UpdateUserRequest)) -> Self::To {
-        Self::To::Update {
+        let operation = CommandOperation::user(UserEvent::Update {
             id: UserId::new(id),
             name: req.name.map(UserName::new),
             rent_limit: req.rent_limit.map(UserRentLimit::new),
-        }
+        });
+        Self::To::from(operation)
     }
 }
 
 impl Intake<DeleteUserRequest> for UserTransformer {
-    type To = UserEvent;
+    type To = QueueInfo<CommandOperation>;
     fn emit(&self, input: DeleteUserRequest) -> Self::To {
-        Self::To::Delete {
+        let operation = CommandOperation::user(UserEvent::Delete {
             id: UserId::new(input.id),
-        }
+        });
+        Self::To::from(operation)
     }
 }
 

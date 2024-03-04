@@ -17,19 +17,19 @@ impl RentRouter for Router<AppModule> {
         self.route(
             "/rents",
             post(
-                |State(handler): State<AppModule>, Query(req): Query<RentRequest>| async move {
+                |State(module): State<AppModule>, Query(req): Query<RentRequest>| async move {
                     Controller::new(RentTransformer, RentPresenter)
                         .intake(req)
-                        .handle(|event| handler.pgpool().handle_event(event))
+                        .handle(|event| module.handler().pgpool().handle_event(event))
                         .await
                         .map_err(ErrorStatus::from)
                 },
             )
             .delete(
-                |State(handler): State<AppModule>, Query(req): Query<ReturnRequest>| async move {
+                |State(module): State<AppModule>, Query(req): Query<ReturnRequest>| async move {
                     Controller::new(RentTransformer, RentPresenter)
                         .intake(req)
-                        .handle(|event| handler.pgpool().handle_event(event))
+                        .handle(|event| module.handler().pgpool().handle_event(event))
                         .await
                         .map_err(ErrorStatus::from)
                 },

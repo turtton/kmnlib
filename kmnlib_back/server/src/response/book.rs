@@ -29,6 +29,13 @@ impl IntoResponse for BookResponse {
 
 pub struct BookPresenter;
 
+impl Exhaust<()> for BookPresenter {
+    type To = ();
+    fn emit(&self, input: ()) -> Self::To {
+        input
+    }
+}
+
 impl Exhaust<BookId> for BookPresenter {
     type To = CreatedBookResponse;
     fn emit(&self, input: BookId) -> Self::To {

@@ -30,6 +30,13 @@ impl IntoResponse for UserResponse {
 
 pub struct UserPresenter;
 
+impl Exhaust<()> for UserPresenter {
+    type To = ();
+    fn emit(&self, input: ()) -> Self::To {
+        input
+    }
+}
+
 impl Exhaust<UserId> for UserPresenter {
     type To = CreatedUserResponse;
     fn emit(&self, input: UserId) -> Self::To {

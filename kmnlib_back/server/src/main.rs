@@ -13,6 +13,7 @@ use tracing_subscriber::Layer;
 mod controller;
 mod error;
 mod handler;
+mod mq;
 mod request;
 mod response;
 mod route;

@@ -12,6 +12,7 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
+use kernel::interface::mq::MessageQueue;
 use uuid::Uuid;
 
 pub trait UserRouter {
@@ -23,19 +24,19 @@ impl UserRouter for Router<AppModule> {
         self.route(
             "/users",
             get(
-                |State(handler): State<AppModule>, Query(req): Query<GetAllUserRequest>| async move {
+                |State(module): State<AppModule>, Query(req): Query<GetAllUserRequest>| async move {
                     Controller::new(UserTransformer, UserPresenter)
                         .intake(req)
-                        .handle(|dto| handler.pgpool().get_all(dto))
+                        .handle(|dto| module.handler().pgpool().get_all(dto))
                         .await
                         .map_err(ErrorStatus::from)
                 },
             )
             .post(
-                |State(handler): State<AppModule>, Json(req): Json<CreateUserRequest>| async move {
+                |State(module): State<AppModule>, Json(req): Json<CreateUserRequest>| async move {
                     Controller::new(UserTransformer, UserPresenter)
                         .intake(req)
-                        .handle(|event| handler.pgpool().handle_event(event))
+                        .handle(|event| module.handler().pgpool().handle_event(event))
                         .await
                         .map_err(ErrorStatus::from)
                 },
@@ -44,10 +45,10 @@ impl UserRouter for Router<AppModule> {
         .route(
             "/users/:id",
             get(
-                |State(handler): State<AppModule>, Path(id): Path<Uuid>| async move {
+                |State(module): State<AppModule>, Path(id): Path<Uuid>| async move {
                     Controller::new(UserTransformer, UserPresenter)
                         .intake(GetUserRequest::new(id))
-                        .handle(|dto| async move { handler.pgpool().get_user(&dto).await })
+                        .handle(|dto| async move { module.handler().pgpool().get_user(&dto).await })
                         .await
                         .map_err(ErrorStatus::from)
                         .map(|res| {
@@ -57,37 +58,39 @@ impl UserRouter for Router<AppModule> {
                 },
             )
             .patch(
-                |State(handler): State<AppModule>,
+                |State(module): State<AppModule>,
                  Path(id): Path<Uuid>,
                  Json(req): Json<UpdateUserRequest>| async move {
                     Controller::new(UserTransformer, UserPresenter)
                         .intake((id, req))
-                        .handle(|event| handler.pgpool().handle_event(event))
+                        .handle(|info| async move { module.worker().command().queue(&info).await })
                         .await
                         .map_err(ErrorStatus::from)
                 },
             )
             .delete(
-                |State(handler): State<AppModule>, Path(id): Path<Uuid>| async move {
+                |State(module): State<AppModule>, Path(id): Path<Uuid>| async move {
                     Controller::new(UserTransformer, UserPresenter)
                         .intake(DeleteUserRequest::new(id))
-                        .handle(|event| handler.pgpool().handle_event(event))
+                        .handle(|info| async move { module.worker().command().queue(&info).await })
                         .await
                         .map_err(ErrorStatus::from)
                 },
             ),
-        ).route(
+        )
+        .route(
             "/users/:id/rents",
             get(
-                |State(handler): State<AppModule>, Path(id): Path<Uuid>| async move {
+                |State(module): State<AppModule>, Path(id): Path<Uuid>| async move {
                     Controller::new(UserTransformer, RentPresenter)
                         .intake(GetRentsRequest::new(id))
-                        .handle(
-                            |dto| async move { handler.pgpool().get_rents_from_user(&dto).await }
-                        ).await
+                        .handle(|dto| async move {
+                            module.handler().pgpool().get_rents_from_user(&dto).await
+                        })
+                        .await
                         .map_err(ErrorStatus::from)
-                }
-            )
+                },
+            ),
         )
     }
 }

@@ -9,6 +9,8 @@ use kernel::interface::database::{DatabaseConnection, Transaction};
 use kernel::KernelError;
 use std::ops::{Deref, DerefMut};
 
+pub use crate::database::redis::mq::*;
+
 const REDIS_URL: &str = "REDIS_URL";
 
 pub struct RedisDatabase {

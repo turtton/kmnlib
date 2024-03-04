@@ -1,11 +1,12 @@
 use crate::database::DatabaseConnection;
 use crate::KernelError;
-use destructure::Destructure;
+use destructure::{Destructure, Mutation};
 use error_stack::Context;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::pin::Pin;
+use std::time::Duration;
 use uuid::Uuid;
 use vodca::References;
 
@@ -38,6 +39,15 @@ impl<T> QueueInfo<T> {
     }
 }
 
+impl<T> From<T> for QueueInfo<T> {
+    fn from(value: T) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            data: value,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, References, Destructure)]
 pub struct ErroredInfo<T> {
     id: Uuid,
@@ -55,11 +65,21 @@ impl<T> ErroredInfo<T> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, References, Mutation)]
 pub struct MQConfig {
-    pub worker_count: i32,
-    pub max_retry: i32,
-    pub retry_delay: i32,
+    worker_count: i32,
+    max_retry: i32,
+    retry_delay: Duration,
+}
+
+impl Default for MQConfig {
+    fn default() -> Self {
+        Self {
+            worker_count: 4,
+            max_retry: 3,
+            retry_delay: Duration::from_secs(180),
+        }
+    }
 }
 
 pub type AsyncWork =

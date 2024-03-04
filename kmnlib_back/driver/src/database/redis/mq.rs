@@ -68,7 +68,7 @@ where
                     &mut con,
                     &name,
                     &member_name,
-                    &config.retry_delay,
+                    config.retry_delay(),
                 )
                 .await;
                 if result.is_err() || result.as_ref().is_ok_and(Option::is_none) {
@@ -98,7 +98,7 @@ where
                 };
 
                 if let Err(report) = result {
-                    if delivered_count > config.max_retry.into() {
+                    if delivered_count > (*config.max_retry()).into() {
                         if let Err(report) = RedisJobInternal::push_failed_info(
                             &mut con,
                             &name,
@@ -167,7 +167,7 @@ where
     }
 
     fn start_workers(&self) {
-        for _ in 1..self.config.worker_count {
+        for _ in 1..*self.config.worker_count() {
             let db = self.db.clone();
             let process = Arc::clone(&self.worker_process);
             let name = self.name.clone();
@@ -346,13 +346,15 @@ impl RedisJobInternal {
         con: &mut Connection,
         name: &str,
         own_member: &str,
-        time_millis: &i32,
+        idle_time: &Duration,
     ) -> error_stack::Result<Option<QueueData<T>>, KernelError>
     where
         T: for<'de> Deserialize<'de>,
     {
         // Ignore error
         let _ = Self::create_group(con, name).await;
+        let time_millis =
+            u64::try_from(idle_time.as_millis()).change_context_lazy(|| KernelError::Internal)?;
         let group = group(name);
         let value: Value = redis::cmd("XPENDING")
             .arg(name)
@@ -587,7 +589,8 @@ mod test {
 
         sleep(Duration::from_secs(1)).await;
         let pending: Option<QueueData<TestData>> =
-            RedisJobInternal::pop_pending(&mut con, name, member, &500).await?;
+            RedisJobInternal::pop_pending(&mut con, name, member, &Duration::from_millis(500))
+                .await?;
         println!("result: {pending:?}");
 
         RedisJobInternal::mark_done(&mut con, name, &result.id).await?;
@@ -607,11 +610,10 @@ mod test {
             .init();
         let db = RedisDatabase::new()?;
         let name = "test";
-        let config = MQConfig {
-            worker_count: 5,
-            max_retry: 3,
-            retry_delay: 1000,
-        };
+        let mut config = MQConfig::default();
+        config.substitute(|config| {
+            *config.retry_delay = Duration::from_secs(1);
+        });
         let mq = RedisMessageQueue::new(db.clone(), name, config, |data: TestData| {
             Box::pin(async move {
                 info!("data: {data:?}");

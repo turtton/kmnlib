@@ -4,9 +4,10 @@ use deadpool_redis::redis::AsyncCommands;
 use deadpool_redis::{redis, Connection};
 use error_stack::{Report, ResultExt};
 use kernel::interface::database::DatabaseConnection;
-use kernel::interface::job::{
-    AsyncWork, DestructQueueInfo, ErrorOperation, ErroredInfo, MQConfig, MessageQueue, QueueInfo,
-};
+use kernel::interface::mq::MQConfig;
+use kernel::interface::mq::{DestructQueueInfo, ErrorOperation, MessageQueue};
+use kernel::interface::mq::{ErroredInfo, QueueInfo};
+use kernel::interface::mq::{Handler, HandlerContainer, HandlerConverter};
 use kernel::KernelError;
 use redis::streams::StreamReadOptions;
 use redis::{RedisResult, Value};
@@ -14,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::str::from_utf8;
-use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{debug, error, warn};
@@ -27,27 +28,31 @@ struct QueueData<T> {
     info: QueueInfo<T>,
 }
 
-pub struct RedisMessageQueue<T>
+pub struct RedisMessageQueue<M, T>
 where
+    M: 'static + Clone + Send + Sync,
     T: 'static + Clone + Serialize + for<'de> Deserialize<'de> + Sync + Send,
 {
     name: String,
     db: RedisDatabase,
+    module: M,
     config: MQConfig,
-    worker_process: Arc<Box<dyn Fn(T) -> AsyncWork + Send + Sync>>,
+    worker_process: Mutex<Box<dyn HandlerConverter<M, T>>>,
     _data_type: PhantomData<T>,
 }
 
-impl<T> RedisMessageQueue<T>
+impl<M, T> RedisMessageQueue<M, T>
 where
+    M: 'static + Clone + Send + Sync,
     T: Clone + Serialize + for<'de> Deserialize<'de> + Sync + Send,
 {
-    #[tracing::instrument(skip(db, block))]
+    #[tracing::instrument(skip(db, module, block))]
     async fn listen(
         db: RedisDatabase,
+        module: M,
         name: String,
         config: MQConfig,
-        block: Arc<Box<impl Fn(T) -> AsyncWork + Sync + Send + ?Sized>>,
+        block: Box<dyn HandlerConverter<M, T>>,
     ) {
         let member_name = format!("consumer:{}", Uuid::new_v4());
         loop {
@@ -86,7 +91,10 @@ where
             };
             debug!("Processing Id: {id}, TryCount: {delivered_count}");
             let DestructQueueInfo { id: uuid, data }: DestructQueueInfo<T> = info.into_destruct();
-            let result = block(data.clone()).await;
+            let result = block
+                .clone_box()
+                .convert(module.clone(), data.clone())
+                .await;
             {
                 let transact = db.transact().await;
                 let mut con = match transact {
@@ -147,34 +155,54 @@ where
 }
 
 #[async_trait::async_trait]
-impl<T> MessageQueue<T> for RedisMessageQueue<T>
+impl<M, T> MessageQueue<M, T> for RedisMessageQueue<M, T>
 where
+    M: 'static + Clone + Send + Sync,
     T: 'static + Clone + Serialize + for<'de> Deserialize<'de> + Sync + Send,
 {
     type DatabaseConnection = RedisDatabase;
 
-    fn new<F>(db: Self::DatabaseConnection, name: &str, config: MQConfig, process: F) -> Self
+    fn new<H>(
+        db: Self::DatabaseConnection,
+        module: M,
+        name: &str,
+        config: MQConfig,
+        process: H,
+    ) -> Self
     where
-        F: 'static + Fn(T) -> AsyncWork + Sync + Send,
+        H: Handler<M, T>,
     {
+        let container =
+            HandlerContainer::new(process, |handler, module, data| handler.call(module, data));
         Self {
             name: name.to_string(),
             db,
+            module,
             config,
-            worker_process: Arc::new(Box::new(process)),
+            worker_process: Mutex::new(Box::new(container)),
             _data_type: PhantomData,
         }
     }
 
     fn start_workers(&self) {
-        for _ in 1..*self.config.worker_count() {
+        let mut i = 0;
+        loop {
+            if i >= *self.config.worker_count() {
+                break;
+            }
             let db = self.db.clone();
-            let process = Arc::clone(&self.worker_process);
+            let module = self.module.clone();
+            let process = self.worker_process.lock();
+            let process = match process {
+                Ok(guard) => guard.clone_box(),
+                Err(_) => continue,
+            };
             let name = self.name.clone();
             let config = self.config.clone();
             tokio::spawn(async move {
-                RedisMessageQueue::listen(db, name, config, process).await;
+                RedisMessageQueue::listen(db, module, name, config, process).await;
             });
+            i += 1;
         }
     }
 
@@ -553,8 +581,10 @@ mod test {
     use crate::database::RedisDatabase;
     use error_stack::Report;
     use kernel::interface::database::DatabaseConnection;
-    use kernel::interface::job::ErrorOperation::Delay;
-    use kernel::interface::job::{MQConfig, MessageQueue, QueueInfo};
+    use kernel::interface::mq::ErrorOperation::Delay;
+    use kernel::interface::mq::MQConfig;
+    use kernel::interface::mq::MessageQueue;
+    use kernel::interface::mq::QueueInfo;
     use kernel::KernelError;
     use rand::random;
     use serde::{Deserialize, Serialize};
@@ -614,8 +644,12 @@ mod test {
         config.substitute(|config| {
             *config.retry_delay = Duration::from_secs(1);
         });
-        let mq = RedisMessageQueue::new(db.clone(), name, config, |data: TestData| {
-            Box::pin(async move {
+        let mq = RedisMessageQueue::new(
+            db.clone(),
+            (),
+            name,
+            config,
+            |_none, data: TestData| async move {
                 info!("data: {data:?}");
                 sleep(Duration::from_millis(20)).await;
                 // Delayed in 50%
@@ -624,8 +658,8 @@ mod test {
                 } else {
                     Err(Report::new(Delay))
                 }
-            })
-        });
+            },
+        );
 
         mq.start_workers();
 
@@ -638,11 +672,10 @@ mod test {
             mq.queue(&data).await?;
         }
 
-        let mut con = db.transact().await.unwrap();
         loop {
-            let wait = RedisJobInternal::get_wait_len(&mut con, name).await?;
-            let delayed = RedisJobInternal::get_delayed_len(&mut con, name).await?;
-            let failed = RedisJobInternal::get_failed_len(&mut con, name).await?;
+            let wait = mq.get_queued_len().await?;
+            let delayed = mq.get_delayed_len().await?;
+            let failed = mq.get_failed_len().await?;
             info!("Count: {wait}, Delayed: {delayed}, Failed: {failed}");
             sleep(Duration::from_secs(1)).await;
         }

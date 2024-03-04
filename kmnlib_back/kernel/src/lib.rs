@@ -31,7 +31,7 @@ pub mod interface {
         pub use crate::handler::*;
         pub use crate::modify::*;
     }
-    pub mod job {
+    pub mod mq {
         pub use crate::mq::*;
     }
 }

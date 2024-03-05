@@ -1,0 +1,39 @@
+name: Deploy REST API
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - REST_api
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+      - uses: pnpm/action-setup@v3
+        with:
+          package_json_file: ./REST_api/package.json
+      - run: pnpm --package=@redocly/cli dlx redocly build-docs tsp-output/@typespec/openapi3/openapi.yaml -o output/index.html
+        working-directory: REST_api
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'REST_api/output'
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -18,7 +18,7 @@ use kernel::KernelError;
 pub trait HandleRentService:
     'static + Sync + Send + DependOnRentEventHandler + GetRentService + GetUserService + GetBookService
 {
-    async fn handle_event(&self, event: RentEvent) -> error_stack::Result<(), KernelError> {
+    async fn handle_rent_event(&self, event: RentEvent) -> error_stack::Result<(), KernelError> {
         let command =
             match event {
                 RentEvent::Rent { book_id, user_id } => {

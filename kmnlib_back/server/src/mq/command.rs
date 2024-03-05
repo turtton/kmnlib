@@ -38,11 +38,13 @@ pub fn init_command_worker(
         |handler: Arc<Handler>, data: CommandOperation| async move {
             let pgpool = handler.pgpool();
             match data {
-                CommandOperation::Book(book) => HandleBookService::handle_event(pgpool, book)
+                CommandOperation::Book(book) => pgpool
+                    .handle_book_event(book)
                     .await
                     .map(|_| ())
                     .change_context_lazy(|| ErrorOperation::Delay),
-                CommandOperation::User(user) => HandleUserService::handle_event(pgpool, user)
+                CommandOperation::User(user) => pgpool
+                    .handle_user_event(user)
                     .await
                     .map(|_| ())
                     .change_context_lazy(|| ErrorOperation::Delay),

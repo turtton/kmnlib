@@ -36,7 +36,7 @@ impl BookRouter for Router<AppModule> {
                 |State(module): State<AppModule>, Json(req): Json<CreateBookRequest>| async move {
                     Controller::new(BookTransformer, BookPresenter)
                         .intake(req)
-                        .handle(|event| module.handler().pgpool().handle_event(event))
+                        .handle(|event| module.handler().pgpool().handle_book_event(event))
                         .await
                         .map_err(ErrorStatus::from)
                 },

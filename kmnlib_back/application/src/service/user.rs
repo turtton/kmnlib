@@ -13,7 +13,10 @@ use crate::transfer::{GetAllUserDto, GetUserDto};
 
 #[async_trait::async_trait]
 pub trait HandleUserService: 'static + Sync + Send + DependOnUserEventHandler {
-    async fn handle_event(&self, event: UserEvent) -> error_stack::Result<UserId, KernelError> {
+    async fn handle_user_event(
+        &self,
+        event: UserEvent,
+    ) -> error_stack::Result<UserId, KernelError> {
         let mut connection = self.database_connection().transact().await?;
 
         let command = CommandInfo::new(event, None);

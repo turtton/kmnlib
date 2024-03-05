@@ -36,7 +36,7 @@ impl UserRouter for Router<AppModule> {
                 |State(module): State<AppModule>, Json(req): Json<CreateUserRequest>| async move {
                     Controller::new(UserTransformer, UserPresenter)
                         .intake(req)
-                        .handle(|event| module.handler().pgpool().handle_event(event))
+                        .handle(|event| module.handler().pgpool().handle_user_event(event))
                         .await
                         .map_err(ErrorStatus::from)
                 },

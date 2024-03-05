@@ -25,6 +25,10 @@ model GetInfos {
   offset?: int64 = 0;
 }
 
+model GetInfo {
+  target: InfoTarget
+}
+
 enum LengthTarget {
   ...InfoTarget,
   queued,
@@ -61,6 +65,8 @@ namespace Infos {
     get(
       @path
       id: InfoId,
+      @body
+      body: GetInfo
     ): {
       ...Common.Success;
 

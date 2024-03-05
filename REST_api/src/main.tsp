@@ -1,7 +1,10 @@
 import "@typespec/http";
 import "@typespec/rest";
 import "@typespec/openapi3";
+import "./book.tsp";
 import "./common.tsp";
+import "./mq.tsp";
+import "./rent.tsp";
 import "./user.tsp";
 
 using TypeSpec.Http;

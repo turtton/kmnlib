@@ -13,5 +13,6 @@
     "@typespec/rest": "latest",
     "@typespec/openapi3": "latest"
   },
-  "private": true
+  "private": true,
+  "packageManager": "pnpm@8.6.1"
 }

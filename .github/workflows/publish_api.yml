@@ -5,6 +5,7 @@ on:
     branches: [ "main" ]
     paths:
       - REST_api
+      - .github/workflows/publish_api.yml
 
 permissions:
   contents: read

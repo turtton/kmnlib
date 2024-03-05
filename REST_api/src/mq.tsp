@@ -14,12 +14,24 @@ namespace KMNLib.QueueStateAPI;
 @format("uuid")
 scalar InfoId extends string;
 
-alias InfoTarget = "delayed" | "failed";
+enum InfoTarget {
+  delayed,
+  failed,
+}
 
 model GetInfos {
   target: InfoTarget;
   size?: int64 = 0;
   offset?: int64 = 0;
+}
+
+enum LengthTarget {
+  ...InfoTarget,
+  queued,
+}
+
+model GetInfoLength {
+  target: LengthTarget;
 }
 
 model InfoResponse {
@@ -62,9 +74,7 @@ namespace Infos {
     @get
     get(
       @body
-      body: {
-        target: InfoTarget | "queued";
-      },
+      body: GetInfoLength,
     ): {
       ...Common.Success;
 

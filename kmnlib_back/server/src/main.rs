@@ -1,6 +1,6 @@
 use crate::error::StackTrace;
 use crate::handler::AppModule;
-use crate::route::{BookRouter, RentRouter, UserRouter};
+use crate::route::{BookRouter, QueueRouter, RentRouter, UserRouter};
 use error_stack::ResultExt;
 use kernel::KernelError;
 use std::net::SocketAddr;
@@ -46,6 +46,7 @@ async fn main() -> Result<(), StackTrace> {
         .route_book()
         .route_user()
         .route_rent()
+        .route_queue()
         .layer(
             CorsLayer::new(), //TODO .allow_origin([""])
         )

@@ -115,12 +115,15 @@ where
     T: Intake<I, To = D>,
     P: TryExhaust<O>,
 {
-    pub async fn try_handle<F, Fut>(self, f: F) -> Result<P::To, P::Error>
+    pub async fn try_handle<F, Fut, E>(self, f: F) -> Result<P::To, P::Error>
     where
         F: FnOnce(D) -> Fut,
-        Fut: IntoFuture<Output = O>,
+        Fut: IntoFuture<Output = Result<O, E>>,
+        E: Into<P::Error>,
     {
-        self.controller.preset().emit(f(self.transformed).await)
+        self.controller
+            .preset()
+            .emit(f(self.transformed).await.map_err(Into::into)?)
     }
 }
 

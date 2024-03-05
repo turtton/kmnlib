@@ -1,5 +1,6 @@
 mod book;
+mod queue;
 mod rent;
 mod user;
 
-pub use self::{book::*, rent::*, user::*};
+pub use self::{book::*, queue::*, rent::*, user::*};

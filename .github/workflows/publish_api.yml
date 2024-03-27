@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "main" ]
     paths:
-      - REST_api./*
+      - kmnlib_api/*
       - .github/workflows/publish_api.yml
 
 permissions:
@@ -26,7 +26,7 @@ jobs:
           node-version: 18
       - uses: pnpm/action-setup@v3
         with:
-          package_json_file: ./REST_api/package.json
+          package_json_file: ./kmnlib_api/package.json
           run_install: false
       - name: Get pnpm store directory
         shell: bash
@@ -41,17 +41,17 @@ jobs:
             ${{ runner.os }}-pnpm-store-
       - name: Install dependencies
         run: pnpm install
-        working-directory: REST_api
+        working-directory: kmnlib_api
       - run: pnpm run build
-        working-directory: REST_api
+        working-directory: kmnlib_api
       - run: pnpm --package=@redocly/cli dlx redocly build-docs tsp-output/@typespec/openapi3/openapi.yaml -o output/index.html
-        working-directory: REST_api
+        working-directory: kmnlib_api
       - name: Setup Pages
         uses: actions/configure-pages@v4
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: 'REST_api/output'
+          path: 'kmnlib_api/output'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

@@ -39,7 +39,7 @@ interface Users {
   @get
   get(): {
     ...Common.Success;
-    @body user: [UserResponse];
+    @body user: UserResponse[];
   } | Common.InternalError;
 
   @summary("Create user")

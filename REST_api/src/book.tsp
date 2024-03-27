@@ -40,7 +40,7 @@ interface Books {
   @get
   get(): {
     ...Common.Success;
-    @body book: [BookResponse];
+    @body book: BookResponse[];
   } | Common.InternalError;
   @summary("Create book")
   @post
